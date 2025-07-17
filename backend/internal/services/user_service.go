@@ -5,14 +5,13 @@ import (
 	"fmt"
 	"nothing-community-backend/internal/database"
 	"nothing-community-backend/internal/models"
-
-	"github.com/appwrite/sdk-for-go/appwrite"
 )
 
 type UserService struct {
 	appwriteClient *database.AppwriteClient
 }
 
+func NewUserService(appwriteClient *database.AppwriteClient) *UserService {
 	return &UserService{
 		appwriteClient: appwriteClient,
 	}
@@ -37,7 +36,6 @@ func (s *UserService) CreateUser(user models.User) error {
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
 		user.ID,
 		userData,
-		nil,
 	)
 
 	return err
@@ -48,14 +46,13 @@ func (s *UserService) GetUserByID(userID string) (*models.User, error) {
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
 		userID,
-		nil,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	var user models.User
-	if err := s.mapDocumentToUser(doc.Data, &user); err != nil {
+	if err := s.mapDocumentToUser(doc, &user); err != nil {
 		return nil, err
 	}
 
@@ -66,7 +63,7 @@ func (s *UserService) GetUserByID(userID string) (*models.User, error) {
 func (s *UserService) UpdateUser(userID string, req models.UpdateUserRequest) (*models.User, error) {
 	// Convert update request to map
 	updateData := make(map[string]interface{})
-	
+
 	if req.Name != "" {
 		updateData["name"] = req.Name
 	}
@@ -87,15 +84,14 @@ func (s *UserService) UpdateUser(userID string, req models.UpdateUserRequest) (*
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
 		userID,
-		updateData,
-		nil,
+		s.appwriteClient.Database.WithUpdateDocumentData(updateData),
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	var user models.User
-	if err := s.mapDocumentToUser(doc.Data, &user); err != nil {
+	if err := s.mapDocumentToUser(doc, &user); err != nil {
 		return nil, err
 	}
 
@@ -112,7 +108,7 @@ func (s *UserService) ListUsers(limit, offset int) ([]models.User, error) {
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -121,7 +117,7 @@ func (s *UserService) ListUsers(limit, offset int) ([]models.User, error) {
 	var users []models.User
 	for _, doc := range docs.Documents {
 		var user models.User
-		if err := s.mapDocumentToUser(doc.Data, &user); err != nil {
+		if err := s.mapDocumentToUser(doc, &user); err != nil {
 			continue
 		}
 		user.ID = doc.Id

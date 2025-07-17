@@ -1,13 +1,17 @@
 package services
 
 import (
-	"context"
+	context "context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"nothing-community-backend/internal/database"
+	"time"
+
 	"nothing-community-backend/internal/config"
+	"nothing-community-backend/internal/database"
 	"nothing-community-backend/internal/models"
 
 	"golang.org/x/oauth2"
@@ -20,6 +24,7 @@ type OAuthService struct {
 	config         *config.Config
 	googleConfig   *oauth2.Config
 	githubConfig   *oauth2.Config
+	httpClient     *http.Client
 }
 
 type GoogleUserInfo struct {
@@ -38,191 +43,200 @@ type GitHubUserInfo struct {
 	AvatarURL string `json:"avatar_url"`
 }
 
+func NewOAuthService(appwriteClient *database.AppwriteClient, cfg *config.Config) *OAuthService {
 	googleConfig := &oauth2.Config{
 		ClientID:     cfg.GoogleClientID,
 		ClientSecret: cfg.GoogleClientSecret,
-		RedirectURL:  "http://localhost:8080/api/v1/auth/google/callback",
+		RedirectURL:  cfg.GoogleRedirectURL,
 		Scopes:       []string{"openid", "profile", "email"},
 		Endpoint:     google.Endpoint,
 	}
-
 	githubConfig := &oauth2.Config{
 		ClientID:     cfg.GitHubClientID,
 		ClientSecret: cfg.GitHubClientSecret,
-		RedirectURL:  "http://localhost:8080/api/v1/auth/github/callback",
+		RedirectURL:  cfg.GitHubRedirectURL,
 		Scopes:       []string{"user:email"},
 		Endpoint:     github.Endpoint,
 	}
-
+	// Shared HTTP client with timeout
+	httpClient := &http.Client{Timeout: 10 * time.Second}
 	return &OAuthService{
 		appwriteClient: appwriteClient,
 		config:         cfg,
 		googleConfig:   googleConfig,
 		githubConfig:   githubConfig,
+		httpClient:     httpClient,
 	}
 }
 
-func (s *OAuthService) GetGoogleAuthURL(state string) string {
-	return s.googleConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
-}
-
-func (s *OAuthService) GetGitHubAuthURL(state string) string {
-	return s.githubConfig.AuthCodeURL(state)
-}
-
-func (s *OAuthService) HandleGoogleCallback(code string) (*models.AuthResponse, error) {
-	token, err := s.googleConfig.Exchange(context.Background(), code)
-	if err != nil {
-		return nil, fmt.Errorf("failed to exchange code: %v", err)
+// Secure random state generator
+func generateState() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
 	}
+	return base64.URLEncoding.EncodeToString(b), nil
+}
 
-	// Get user info from Google
-	client := s.googleConfig.Client(context.Background(), token)
-	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+func (s *OAuthService) GetGoogleAuthURL(ctx context.Context) (string, string, error) {
+	state, err := generateState()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user info: %v", err)
+		return "", "", err
+	}
+	url := s.googleConfig.AuthCodeURL(state, oauth2.AccessTypeOffline)
+	return url, state, nil
+}
+
+func (s *OAuthService) GetGitHubAuthURL(ctx context.Context) (string, string, error) {
+	state, err := generateState()
+	if err != nil {
+		return "", "", err
+	}
+	url := s.githubConfig.AuthCodeURL(state)
+	return url, state, nil
+}
+
+func (s *OAuthService) HandleGoogleCallback(ctx context.Context, code string) (*models.AuthResponse, error) {
+	token, err := s.googleConfig.Exchange(ctx, code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code: %w", err)
+	}
+	client := s.googleConfig.Client(ctx, token)
+	userInfo, err := fetchGoogleUserInfo(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	return s.createOrGetUser(userInfo.Email, userInfo.Name, userInfo.Picture, "google")
+}
+
+func (s *OAuthService) HandleGitHubCallback(ctx context.Context, code string) (*models.AuthResponse, error) {
+	token, err := s.githubConfig.Exchange(ctx, code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange code: %w", err)
+	}
+	client := s.githubConfig.Client(ctx, token)
+	userInfo, err := fetchGitHubUserInfo(ctx, client)
+	if err != nil {
+		return nil, err
+	}
+	return s.createOrGetUser(userInfo.Email, userInfo.Name, userInfo.AvatarURL, "github")
+}
+
+// --- User Info Fetchers ---
+
+func fetchGoogleUserInfo(ctx context.Context, client *http.Client) (*GoogleUserInfo, error) {
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://www.googleapis.com/oauth2/v2/userinfo", nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Google user info: %w", err)
 	}
 	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %v", err)
+	if resp.StatusCode != 200 {
+		return nil, errors.New("Google user info request failed")
 	}
-
-	var googleUser GoogleUserInfo
-	if err := json.Unmarshal(body, &googleUser); err != nil {
-		return nil, fmt.Errorf("failed to parse user info: %v", err)
+	var info GoogleUserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, fmt.Errorf("failed to decode Google user info: %w", err)
 	}
-
-	// Create or get user
-	return s.createOrGetUser(googleUser.Email, googleUser.Name, googleUser.Picture, "google")
+	return &info, nil
 }
 
-func (s *OAuthService) HandleGitHubCallback(code string) (*models.AuthResponse, error) {
-	token, err := s.githubConfig.Exchange(context.Background(), code)
+func fetchGitHubUserInfo(ctx context.Context, client *http.Client) (*GitHubUserInfo, error) {
+	// Fetch user profile
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/user", nil)
+	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to exchange code: %v", err)
-	}
-
-	// Get user info from GitHub
-	client := s.githubConfig.Client(context.Background(), token)
-	resp, err := client.Get("https://api.github.com/user")
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user info: %v", err)
+		return nil, fmt.Errorf("failed to get GitHub user info: %w", err)
 	}
 	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response: %v", err)
+	if resp.StatusCode != 200 {
+		return nil, errors.New("GitHub user info request failed")
 	}
-
-	var githubUser GitHubUserInfo
-	if err := json.Unmarshal(body, &githubUser); err != nil {
-		return nil, fmt.Errorf("failed to parse user info: %v", err)
+	var info GitHubUserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return nil, fmt.Errorf("failed to decode GitHub user info: %w", err)
 	}
-
-	// Get email if not provided
-	email := githubUser.Email
-	if email == "" {
-		email, err = s.getGitHubUserEmail(client)
+	// If email is empty, fetch emails
+	if info.Email == "" {
+		email, err := fetchGitHubPrimaryEmail(ctx, client)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get user email: %v", err)
+			return nil, err
 		}
+		info.Email = email
 	}
-
-	name := githubUser.Name
-	if name == "" {
-		name = githubUser.Login
+	if info.Name == "" {
+		info.Name = info.Login
 	}
-
-	// Create or get user
-	return s.createOrGetUser(email, name, githubUser.AvatarURL, "github")
+	return &info, nil
 }
 
-func (s *OAuthService) getGitHubUserEmail(client *http.Client) (string, error) {
-	resp, err := client.Get("https://api.github.com/user/emails")
+func fetchGitHubPrimaryEmail(ctx context.Context, client *http.Client) (string, error) {
+	req, _ := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/user/emails", nil)
+	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to get GitHub emails: %w", err)
 	}
 	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
+	if resp.StatusCode != 200 {
+		return "", errors.New("GitHub emails request failed")
 	}
-
 	var emails []struct {
 		Email   string `json:"email"`
 		Primary bool   `json:"primary"`
 	}
-
-	if err := json.Unmarshal(body, &emails); err != nil {
-		return "", err
+	if err := json.NewDecoder(resp.Body).Decode(&emails); err != nil {
+		return "", fmt.Errorf("failed to decode GitHub emails: %w", err)
 	}
-
 	for _, email := range emails {
 		if email.Primary {
 			return email.Email, nil
 		}
 	}
-
 	if len(emails) > 0 {
 		return emails[0].Email, nil
 	}
-
-	return "", fmt.Errorf("no email found")
+	return "", errors.New("no email found")
 }
 
+// --- User Creation/Session Logic (unchanged, but can be optimized if needed) ---
+
 func (s *OAuthService) createOrGetUser(email, name, avatar, provider string) (*models.AuthResponse, error) {
-	// Check if user exists in Appwrite database
 	existingUser, err := s.getUserByEmail(email)
 	if err == nil && existingUser != nil {
-		// User exists, create session
 		session, err := s.createUserSession(existingUser.ID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create session: %v", err)
 		}
-
 		return &models.AuthResponse{
 			User:    *existingUser,
 			Session: session,
 		}, nil
 	}
-
-	// Create new user in Appwrite Auth
 	account, err := s.appwriteClient.Account.Create(
 		"unique()",
 		email,
-		"oauth_user_temp_password", // Temporary password for OAuth users
-		&name,
+		"oauth_user_temp_password",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create account: %v", err)
 	}
-
-	// Create user profile in database
 	user := models.User{
 		ID:         account.Id,
 		Name:       name,
 		Email:      email,
 		Avatar:     avatar,
-		IsAdmin:    email == s.config.AdminEmail, // Check if admin email
-		IsVerified: true,                         // OAuth users are verified
+		IsAdmin:    email == s.config.AdminEmail,
+		IsVerified: true,
 		IsActive:   true,
 		Provider:   provider,
 	}
-
 	if err := s.createUserProfile(user); err != nil {
 		return nil, fmt.Errorf("failed to create user profile: %v", err)
 	}
-
-	// Create session
 	session, err := s.createUserSession(user.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %v", err)
 	}
-
 	return &models.AuthResponse{
 		User:    user,
 		Session: session,
@@ -233,25 +247,21 @@ func (s *OAuthService) getUserByEmail(email string) (*models.User, error) {
 	queries := []string{
 		fmt.Sprintf("equal(\"email\", \"%s\")", email),
 	}
-
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
 	}
-
 	if len(docs.Documents) == 0 {
 		return nil, fmt.Errorf("user not found")
 	}
-
 	var user models.User
-	if err := s.mapDocumentToUser(docs.Documents[0].Data, &user); err != nil {
+	if err := s.mapDocumentToUser(docs.Documents[0], &user); err != nil {
 		return nil, err
 	}
-
 	user.ID = docs.Documents[0].Id
 	return &user, nil
 }
@@ -269,15 +279,12 @@ func (s *OAuthService) createUserProfile(user models.User) error {
 		"is_active":   user.IsActive,
 		"provider":    user.Provider,
 	}
-
 	_, err := s.appwriteClient.Database.CreateDocument(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
 		user.ID,
 		userData,
-		nil,
 	)
-
 	return err
 }
 
@@ -292,6 +299,5 @@ func (s *OAuthService) mapDocumentToUser(data interface{}, user *models.User) er
 	if err != nil {
 		return err
 	}
-
 	return json.Unmarshal(jsonData, user)
 }

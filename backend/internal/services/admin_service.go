@@ -6,7 +6,6 @@ import (
 	"nothing-community-backend/internal/database"
 	"nothing-community-backend/internal/models"
 
-	"github.com/appwrite/sdk-for-go/appwrite"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -22,6 +21,7 @@ type AdminStats struct {
 	TotalAdmins   int64 `json:"total_admins"`
 }
 
+func NewAdminService(appwriteClient *database.AppwriteClient, userService *UserService) *AdminService {
 	return &AdminService{
 		appwriteClient: appwriteClient,
 		userService:    userService,
@@ -44,10 +44,9 @@ func (s *AdminService) CreateSuperAdmin(email, password, name string) error {
 
 	// Create account in Appwrite Auth
 	account, err := s.appwriteClient.Account.Create(
-		appwrite.ID.Unique(),
+		"unique()",
 		email,
 		password,
-		&name,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create account: %v", err)
@@ -86,9 +85,7 @@ func (s *AdminService) CreateSuperAdmin(email, password, name string) error {
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
 		user.ID,
 		userData,
-		nil,
 	)
-
 	return err
 }
 
@@ -117,10 +114,9 @@ func (s *AdminService) CreateAdmin(req models.CreateAdminRequest, creatorID stri
 
 	// Create account in Appwrite Auth
 	account, err := s.appwriteClient.Account.Create(
-		appwrite.ID.Unique(),
+		"unique()",
 		req.Email,
 		req.Password,
-		&req.Name,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create account: %v", err)
@@ -159,7 +155,6 @@ func (s *AdminService) CreateAdmin(req models.CreateAdminRequest, creatorID stri
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
 		user.ID,
 		userData,
-		nil,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user profile: %v", err)
@@ -177,7 +172,7 @@ func (s *AdminService) GetAdmins() ([]models.User, error) {
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -186,7 +181,7 @@ func (s *AdminService) GetAdmins() ([]models.User, error) {
 	var admins []models.User
 	for _, doc := range docs.Documents {
 		var user models.User
-		if err := s.mapDocumentToUser(doc.Data, &user); err != nil {
+		if err := s.mapDocumentToUser(doc, &user); err != nil {
 			continue
 		}
 		user.ID = doc.Id
@@ -228,15 +223,14 @@ func (s *AdminService) UpdateAdminRole(adminID string, newRole models.UserRole, 
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
 		adminID,
-		updateData,
-		nil,
+		s.appwriteClient.Database.WithUpdateDocumentData(updateData),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update admin role: %v", err)
 	}
 
 	var updatedUser models.User
-	if err := s.mapDocumentToUser(doc.Data, &updatedUser); err != nil {
+	if err := s.mapDocumentToUser(doc, &updatedUser); err != nil {
 		return nil, err
 	}
 
@@ -266,11 +260,6 @@ func (s *AdminService) DeleteAdmin(adminID string, deleterID string) error {
 		return fmt.Errorf("cannot delete super admin account")
 	}
 
-	// Prevent self-deletion
-	if adminID == deleterID {
-		return fmt.Errorf("cannot delete your own account")
-	}
-
 	// Delete from database
 	_, err = s.appwriteClient.Database.DeleteDocument(
 		s.appwriteClient.Config.AppwriteDatabaseID,
@@ -286,52 +275,47 @@ func (s *AdminService) DeleteAdmin(adminID string, deleterID string) error {
 
 func (s *AdminService) GetDashboardStats() (*AdminStats, error) {
 	// Get total users
-	userDocs, err := s.appwriteClient.Database.ListDocuments(
+	usersDocs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
-		[]string{"limit(1000)"},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get users count: %v", err)
+		return nil, err
 	}
 
 	// Get total posts
-	postDocs, err := s.appwriteClient.Database.ListDocuments(
+	postsDocs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
-		[]string{"limit(1000)"},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get posts count: %v", err)
+		return nil, err
 	}
 
 	// Get total comments
-	commentDocs, err := s.appwriteClient.Database.ListDocuments(
+	commentsDocs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteCommentsCollectionID,
-		[]string{"limit(1000)"},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get comments count: %v", err)
+		return nil, err
 	}
 
-	// Count admins
-	adminCount := int64(0)
-	for _, doc := range userDocs.Documents {
-		var user models.User
-		if err := s.mapDocumentToUser(doc.Data, &user); err != nil {
-			continue
-		}
-		if user.IsAdmin {
-			adminCount++
-		}
+	// Get total admins
+	adminsDocs, err := s.appwriteClient.Database.ListDocuments(
+		s.appwriteClient.Config.AppwriteDatabaseID,
+		s.appwriteClient.Config.AppwriteUsersCollectionID,
+		s.appwriteClient.Database.WithListDocumentsQueries([]string{"equal(\"is_admin\", true)"}),
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	return &AdminStats{
-		TotalUsers:    int64(len(userDocs.Documents)),
-		TotalPosts:    int64(len(postDocs.Documents)),
-		TotalComments: int64(len(commentDocs.Documents)),
-		TotalAdmins:   adminCount,
+		TotalUsers:    int64(len(usersDocs.Documents)),
+		TotalPosts:    int64(len(postsDocs.Documents)),
+		TotalComments: int64(len(commentsDocs.Documents)),
+		TotalAdmins:   int64(len(adminsDocs.Documents)),
 	}, nil
 }
 
@@ -343,7 +327,7 @@ func (s *AdminService) getUserByEmail(email string) (*models.User, error) {
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -354,7 +338,7 @@ func (s *AdminService) getUserByEmail(email string) (*models.User, error) {
 	}
 
 	var user models.User
-	if err := s.mapDocumentToUser(docs.Documents[0].Data, &user); err != nil {
+	if err := s.mapDocumentToUser(docs.Documents[0], &user); err != nil {
 		return nil, err
 	}
 
@@ -372,8 +356,7 @@ func (s *AdminService) updateUserRole(userID string, role models.UserRole) error
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
 		userID,
-		updateData,
-		nil,
+		s.appwriteClient.Database.WithUpdateDocumentData(updateData),
 	)
 
 	return err

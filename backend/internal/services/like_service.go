@@ -6,13 +6,14 @@ import (
 	"nothing-community-backend/internal/database"
 	"nothing-community-backend/internal/models"
 
-	"github.com/appwrite/sdk-for-go/appwrite"
+	"github.com/appwrite/sdk-for-go/query"
 )
 
 type LikeService struct {
 	appwriteClient *database.AppwriteClient
 }
 
+func NewLikeService(appwriteClient *database.AppwriteClient) *LikeService {
 	return &LikeService{
 		appwriteClient: appwriteClient,
 	}
@@ -47,9 +48,8 @@ func (s *LikeService) TogglePostLike(userID, postID string) (bool, error) {
 	_, err = s.appwriteClient.Database.CreateDocument(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteLikesCollectionID,
-		appwrite.ID.Unique(),
+		"unique()",
 		likeData,
-		nil,
 	)
 	if err != nil {
 		return false, err
@@ -89,9 +89,8 @@ func (s *LikeService) ToggleCommentLike(userID, commentID string) (bool, error) 
 	_, err = s.appwriteClient.Database.CreateDocument(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteLikesCollectionID,
-		appwrite.ID.Unique(),
+		"unique()",
 		likeData,
-		nil,
 	)
 	if err != nil {
 		return false, err
@@ -103,15 +102,16 @@ func (s *LikeService) ToggleCommentLike(userID, commentID string) (bool, error) 
 }
 
 func (s *LikeService) GetPostLikes(postID string) ([]models.User, error) {
+	// Fixed query construction using query builders
 	queries := []string{
-		fmt.Sprintf("equal(\"post_id\", \"%s\")", postID),
-		fmt.Sprintf("equal(\"type\", \"%s\")", string(models.LikeTypePost)),
+		query.Equal("post_id", postID),
+		query.Equal("type", string(models.LikeTypePost)),
 	}
 
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteLikesCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func (s *LikeService) GetPostLikes(postID string) ([]models.User, error) {
 	var users []models.User
 	for _, doc := range docs.Documents {
 		var like models.Like
-		if err := s.mapDocumentToLike(doc.Data, &like); err != nil {
+		if err := s.mapDocumentToLike(doc, &like); err != nil {
 			continue
 		}
 
@@ -147,16 +147,17 @@ func (s *LikeService) IsCommentLikedByUser(userID, commentID string) (bool, erro
 }
 
 func (s *LikeService) getPostLike(userID, postID string) (*models.Like, error) {
+	// Fixed query construction using query builders
 	queries := []string{
-		fmt.Sprintf("equal(\"user_id\", \"%s\")", userID),
-		fmt.Sprintf("equal(\"post_id\", \"%s\")", postID),
-		fmt.Sprintf("equal(\"type\", \"%s\")", string(models.LikeTypePost)),
+		query.Equal("user_id", userID),
+		query.Equal("post_id", postID),
+		query.Equal("type", string(models.LikeTypePost)),
 	}
 
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteLikesCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -167,7 +168,7 @@ func (s *LikeService) getPostLike(userID, postID string) (*models.Like, error) {
 	}
 
 	var like models.Like
-	if err := s.mapDocumentToLike(docs.Documents[0].Data, &like); err != nil {
+	if err := s.mapDocumentToLike(docs.Documents[0], &like); err != nil {
 		return nil, err
 	}
 
@@ -176,16 +177,17 @@ func (s *LikeService) getPostLike(userID, postID string) (*models.Like, error) {
 }
 
 func (s *LikeService) getCommentLike(userID, commentID string) (*models.Like, error) {
+	// Fixed query construction using query builders
 	queries := []string{
-		fmt.Sprintf("equal(\"user_id\", \"%s\")", userID),
-		fmt.Sprintf("equal(\"comment_id\", \"%s\")", commentID),
-		fmt.Sprintf("equal(\"type\", \"%s\")", string(models.LikeTypeComment)),
+		query.Equal("user_id", userID),
+		query.Equal("comment_id", commentID),
+		query.Equal("type", string(models.LikeTypeComment)),
 	}
 
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteLikesCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -196,7 +198,7 @@ func (s *LikeService) getCommentLike(userID, commentID string) (*models.Like, er
 	}
 
 	var like models.Like
-	if err := s.mapDocumentToLike(docs.Documents[0].Data, &like); err != nil {
+	if err := s.mapDocumentToLike(docs.Documents[0], &like); err != nil {
 		return nil, err
 	}
 
@@ -205,15 +207,16 @@ func (s *LikeService) getCommentLike(userID, commentID string) (*models.Like, er
 }
 
 func (s *LikeService) updatePostLikesCount(postID string) {
+	// Fixed query construction using query builders
 	queries := []string{
-		fmt.Sprintf("equal(\"post_id\", \"%s\")", postID),
-		fmt.Sprintf("equal(\"type\", \"%s\")", string(models.LikeTypePost)),
+		query.Equal("post_id", postID),
+		query.Equal("type", string(models.LikeTypePost)),
 	}
 
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteLikesCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return
@@ -221,7 +224,7 @@ func (s *LikeService) updatePostLikesCount(postID string) {
 
 	count := len(docs.Documents)
 
-	// Update post
+	// Fixed updateData with proper type
 	updateData := map[string]interface{}{
 		"likes_count": count,
 	}
@@ -230,21 +233,21 @@ func (s *LikeService) updatePostLikesCount(postID string) {
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
 		postID,
-		updateData,
-		nil,
+		s.appwriteClient.Database.WithUpdateDocumentData(updateData),
 	)
 }
 
 func (s *LikeService) updateCommentLikesCount(commentID string) {
+	// Fixed query construction using query builders
 	queries := []string{
-		fmt.Sprintf("equal(\"comment_id\", \"%s\")", commentID),
-		fmt.Sprintf("equal(\"type\", \"%s\")", string(models.LikeTypeComment)),
+		query.Equal("comment_id", commentID),
+		query.Equal("type", string(models.LikeTypeComment)),
 	}
 
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteLikesCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return
@@ -252,7 +255,7 @@ func (s *LikeService) updateCommentLikesCount(commentID string) {
 
 	count := len(docs.Documents)
 
-	// Update comment
+	// Fixed updateData with proper type
 	updateData := map[string]interface{}{
 		"likes_count": count,
 	}
@@ -261,8 +264,7 @@ func (s *LikeService) updateCommentLikesCount(commentID string) {
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteCommentsCollectionID,
 		commentID,
-		updateData,
-		nil,
+		s.appwriteClient.Database.WithUpdateDocumentData(updateData),
 	)
 }
 
@@ -271,14 +273,13 @@ func (s *LikeService) getUserByID(userID string) (*models.User, error) {
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteUsersCollectionID,
 		userID,
-		nil,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	var user models.User
-	if err := s.mapDocumentToUser(doc.Data, &user); err != nil {
+	if err := s.mapDocumentToUser(doc, &user); err != nil {
 		return nil, err
 	}
 

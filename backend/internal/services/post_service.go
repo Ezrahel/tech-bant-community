@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"nothing-community-backend/internal/database"
 	"nothing-community-backend/internal/models"
-	"time"
-
-	"github.com/appwrite/sdk-for-go/appwrite"
 )
 
 type PostService struct {
@@ -16,6 +13,7 @@ type PostService struct {
 	mediaService   *MediaService
 }
 
+func NewPostService(appwriteClient *database.AppwriteClient, userService *UserService, mediaService *MediaService) *PostService {
 	return &PostService{
 		appwriteClient: appwriteClient,
 		userService:    userService,
@@ -54,16 +52,15 @@ func (s *PostService) CreatePost(userID string, req models.CreatePostRequest) (*
 	doc, err := s.appwriteClient.Database.CreateDocument(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
-		appwrite.ID.Unique(),
+		"unique()",
 		postData,
-		nil,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	// Convert to response
-	return s.documentToPostResponse(doc.Data, doc.Id, userID)
+	return s.documentToPostResponse(doc, doc.Id, userID)
 }
 
 func (s *PostService) GetPost(postID, userID string) (*models.PostResponse, error) {
@@ -71,7 +68,6 @@ func (s *PostService) GetPost(postID, userID string) (*models.PostResponse, erro
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
 		postID,
-		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -80,7 +76,7 @@ func (s *PostService) GetPost(postID, userID string) (*models.PostResponse, erro
 	// Increment views
 	s.incrementViews(postID)
 
-	return s.documentToPostResponse(doc.Data, doc.Id, userID)
+	return s.documentToPostResponse(doc, doc.Id, userID)
 }
 
 func (s *PostService) GetPosts(limit, offset int, userID string) ([]models.PostResponse, error) {
@@ -93,7 +89,7 @@ func (s *PostService) GetPosts(limit, offset int, userID string) ([]models.PostR
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -101,7 +97,7 @@ func (s *PostService) GetPosts(limit, offset int, userID string) ([]models.PostR
 
 	var posts []models.PostResponse
 	for _, doc := range docs.Documents {
-		post, err := s.documentToPostResponse(doc.Data, doc.Id, userID)
+		post, err := s.documentToPostResponse(doc, doc.Id, userID)
 		if err != nil {
 			continue
 		}
@@ -122,7 +118,7 @@ func (s *PostService) GetPostsByCategory(category models.PostCategory, limit, of
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -130,7 +126,7 @@ func (s *PostService) GetPostsByCategory(category models.PostCategory, limit, of
 
 	var posts []models.PostResponse
 	for _, doc := range docs.Documents {
-		post, err := s.documentToPostResponse(doc.Data, doc.Id, userID)
+		post, err := s.documentToPostResponse(doc, doc.Id, userID)
 		if err != nil {
 			continue
 		}
@@ -151,7 +147,7 @@ func (s *PostService) GetPostsByUser(targetUserID string, limit, offset int, use
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -159,7 +155,7 @@ func (s *PostService) GetPostsByUser(targetUserID string, limit, offset int, use
 
 	var posts []models.PostResponse
 	for _, doc := range docs.Documents {
-		post, err := s.documentToPostResponse(doc.Data, doc.Id, userID)
+		post, err := s.documentToPostResponse(doc, doc.Id, userID)
 		if err != nil {
 			continue
 		}
@@ -202,14 +198,13 @@ func (s *PostService) UpdatePost(postID, userID string, req models.UpdatePostReq
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
 		postID,
-		updateData,
-		nil,
+		s.appwriteClient.Database.WithUpdateDocumentData(updateData),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.documentToPostResponse(doc.Data, doc.Id, userID)
+	return s.documentToPostResponse(doc, doc.Id, userID)
 }
 
 func (s *PostService) DeletePost(postID, userID string) error {
@@ -238,7 +233,6 @@ func (s *PostService) incrementViews(postID string) {
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
 		postID,
-		nil,
 	)
 	if err != nil {
 		return
@@ -246,19 +240,21 @@ func (s *PostService) incrementViews(postID string) {
 
 	// Get current views
 	var post models.Post
-	s.mapDocumentToPost(doc.Data, &post)
+	s.mapDocumentToPost(doc, &post)
 
-	// Update views
+	// Increment views
+	newViews := post.Views + 1
+
+	// Update post
 	updateData := map[string]interface{}{
-		"views": post.Views + 1,
+		"views": newViews,
 	}
 
 	s.appwriteClient.Database.UpdateDocument(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
 		postID,
-		updateData,
-		nil,
+		s.appwriteClient.Database.WithUpdateDocumentData(updateData),
 	)
 }
 
@@ -279,16 +275,6 @@ func (s *PostService) documentToPostResponse(data interface{}, id, userID string
 		IsVerified: post.AuthorVerified,
 	}
 
-	// Get media if any
-	var media []models.Media
-	if len(post.MediaIDs) > 0 {
-		for _, mediaID := range post.MediaIDs {
-			if m, err := s.mediaService.GetMedia(mediaID); err == nil {
-				media = append(media, *m)
-			}
-		}
-	}
-
 	// Check if user liked the post (implement this based on your like service)
 	isLiked := false // TODO: Implement like check
 
@@ -306,7 +292,7 @@ func (s *PostService) documentToPostResponse(data interface{}, id, userID string
 		IsPinned:      post.IsPinned,
 		IsHot:         post.IsHot,
 		Location:      post.Location,
-		Media:         media,
+		Media:         []models.Media{}, // TODO: Load media from MediaIDs
 		IsLiked:       isLiked,
 		CreatedAt:     post.CreatedAt,
 		UpdatedAt:     post.UpdatedAt,

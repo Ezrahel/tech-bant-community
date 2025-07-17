@@ -24,7 +24,7 @@ export const authService = {
       );
       
       // Create session after registration
-      const session = await account.createEmailSession(
+      const session = await account.createEmailPasswordSession(
         credentials.email,
         credentials.password
       );
@@ -39,7 +39,7 @@ export const authService = {
   // Login user
   async login(credentials: LoginCredentials) {
     try {
-      const session = await account.createEmailSession(
+      const session = await account.createEmailPasswordSession(
         credentials.email,
         credentials.password
       );

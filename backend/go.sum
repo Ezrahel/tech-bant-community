@@ -1,7 +1,5 @@
 cloud.google.com/go/compute/metadata v0.3.0 h1:Tz+eQXMEqDIKRsmY3cHTL6FVaynIjX2QxYC4trgAKZc=
 cloud.google.com/go/compute/metadata v0.3.0/go.mod h1:zFmK7XCadkQkj6TtorcaGlCW1hT1fIilQDwofLpJ20k=
-github.com/appwrite/sdk-for-go v0.3.0 h1:5Fun3dRSvsIChUBr2cMJUVRuHZ0skqUQVRQ5u+IWfW8=
-github.com/appwrite/sdk-for-go v0.3.0/go.mod h1:aFiOAbfOzGS3811eMCt3T9WDBvjvPVAfOjw10Vghi4E=
 github.com/appwrite/sdk-for-go v0.7.0 h1:w0hSO4XEKRqMPlELsG/Z3lHrVsYl3YKZVnMocqU8NaQ=
 github.com/appwrite/sdk-for-go v0.7.0/go.mod h1:aFiOAbfOzGS3811eMCt3T9WDBvjvPVAfOjw10Vghi4E=
 github.com/bytedance/sonic v1.5.0/go.mod h1:ED5hyg4y6t3/9Ku1R6dU/4KyJ48DZ4jPhfY1O2AihPM=

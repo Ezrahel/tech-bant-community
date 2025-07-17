@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"nothing-community-backend/internal/database"
 	"nothing-community-backend/internal/models"
-
-	"github.com/appwrite/sdk-for-go/appwrite"
 )
 
 type CommentService struct {
@@ -14,6 +12,7 @@ type CommentService struct {
 	userService    *UserService
 }
 
+func NewCommentService(appwriteClient *database.AppwriteClient, userService *UserService) *CommentService {
 	return &CommentService{
 		appwriteClient: appwriteClient,
 		userService:    userService,
@@ -43,9 +42,8 @@ func (s *CommentService) CreateComment(userID string, req models.CreateCommentRe
 	doc, err := s.appwriteClient.Database.CreateDocument(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteCommentsCollectionID,
-		appwrite.ID.Unique(),
+		"unique()",
 		commentData,
-		nil,
 	)
 	if err != nil {
 		return nil, err
@@ -54,7 +52,7 @@ func (s *CommentService) CreateComment(userID string, req models.CreateCommentRe
 	// Update post comments count
 	s.updatePostCommentsCount(req.PostID)
 
-	return s.documentToCommentResponse(doc.Data, doc.Id, userID)
+	return s.documentToCommentResponse(doc, doc.Id, userID)
 }
 
 func (s *CommentService) GetComments(postID, userID string) ([]models.CommentResponse, error) {
@@ -66,7 +64,7 @@ func (s *CommentService) GetComments(postID, userID string) ([]models.CommentRes
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteCommentsCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -74,7 +72,7 @@ func (s *CommentService) GetComments(postID, userID string) ([]models.CommentRes
 
 	var comments []models.CommentResponse
 	for _, doc := range docs.Documents {
-		comment, err := s.documentToCommentResponse(doc.Data, doc.Id, userID)
+		comment, err := s.documentToCommentResponse(doc, doc.Id, userID)
 		if err != nil {
 			continue
 		}
@@ -103,14 +101,13 @@ func (s *CommentService) UpdateComment(commentID, userID string, req models.Upda
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteCommentsCollectionID,
 		commentID,
-		updateData,
-		nil,
+		s.appwriteClient.Database.WithUpdateDocumentData(updateData),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.documentToCommentResponse(doc.Data, doc.Id, userID)
+	return s.documentToCommentResponse(doc, doc.Id, userID)
 }
 
 func (s *CommentService) DeleteComment(commentID, userID string) error {
@@ -144,13 +141,12 @@ func (s *CommentService) GetComment(commentID, userID string) (*models.CommentRe
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteCommentsCollectionID,
 		commentID,
-		nil,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.documentToCommentResponse(doc.Data, doc.Id, userID)
+	return s.documentToCommentResponse(doc, doc.Id, userID)
 }
 
 func (s *CommentService) updatePostCommentsCount(postID string) {
@@ -161,7 +157,7 @@ func (s *CommentService) updatePostCommentsCount(postID string) {
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteCommentsCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return
@@ -178,8 +174,7 @@ func (s *CommentService) updatePostCommentsCount(postID string) {
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwritePostsCollectionID,
 		postID,
-		updateData,
-		nil,
+		s.appwriteClient.Database.WithUpdateDocumentData(updateData),
 	)
 }
 
@@ -204,15 +199,15 @@ func (s *CommentService) documentToCommentResponse(data interface{}, id, userID 
 	isLiked := false // TODO: Implement like check
 
 	return &models.CommentResponse{
-		ID:        comment.ID,
-		Content:   comment.Content,
-		PostID:    comment.PostID,
-		ParentID:  comment.ParentID,
-		Author:    author,
+		ID:         comment.ID,
+		Content:    comment.Content,
+		PostID:     comment.PostID,
+		ParentID:   comment.ParentID,
+		Author:     author,
 		LikesCount: comment.LikesCount,
-		IsLiked:   isLiked,
-		CreatedAt: comment.CreatedAt,
-		UpdatedAt: comment.UpdatedAt,
+		IsLiked:    isLiked,
+		CreatedAt:  comment.CreatedAt,
+		UpdatedAt:  comment.UpdatedAt,
 	}, nil
 }
 

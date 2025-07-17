@@ -155,7 +155,7 @@ const SignupPage: React.FC<SignupPageProps> = ({ setCurrentPage, setIsAuthentica
               className="w-full bg-gray-900 border border-gray-700 text-white py-3 rounded-xl font-medium hover:bg-gray-800 transition-colors flex items-center justify-center space-x-2"
             >
               <Github className="w-5 h-5" />
-              <span>Continue with GitHub</span>
+              <span>Continue with Google</span>
             </button>
             <button 
               onClick={async () => {
@@ -169,7 +169,7 @@ const SignupPage: React.FC<SignupPageProps> = ({ setCurrentPage, setIsAuthentica
               className="w-full bg-gray-900 border border-gray-700 text-white py-3 rounded-xl font-medium hover:bg-gray-800 transition-colors flex items-center justify-center space-x-2"
             >
               <Chrome className="w-5 h-5" />
-              <span>Continue with Google</span>
+              <span>Continue with GitHub</span>
             </button>
           </div>
 

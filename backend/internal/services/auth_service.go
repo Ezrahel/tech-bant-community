@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"nothing-community-backend/internal/database"
 	"nothing-community-backend/internal/models"
-
-	"github.com/appwrite/sdk-for-go/appwrite"
 )
 
 type AuthService struct {
@@ -13,6 +11,7 @@ type AuthService struct {
 	userService    *UserService
 }
 
+func NewAuthService(appwriteClient *database.AppwriteClient, userService *UserService) *AuthService {
 	return &AuthService{
 		appwriteClient: appwriteClient,
 		userService:    userService,
@@ -22,17 +21,16 @@ type AuthService struct {
 func (s *AuthService) Register(req models.CreateUserRequest) (*models.AuthResponse, error) {
 	// Create account in Appwrite Auth
 	account, err := s.appwriteClient.Account.Create(
-		appwrite.ID.Unique(),
+		"unique()",
 		req.Email,
 		req.Password,
-		&req.Name,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create account: %v", err)
 	}
 
 	// Create session
-	session, err := s.appwriteClient.Account.CreateEmailSession(req.Email, req.Password)
+	session, err := s.appwriteClient.Account.CreateEmailPasswordSession(req.Email, req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session: %v", err)
 	}
@@ -60,13 +58,13 @@ func (s *AuthService) Register(req models.CreateUserRequest) (*models.AuthRespon
 
 func (s *AuthService) Login(req models.LoginRequest) (*models.AuthResponse, error) {
 	// Create session
-	session, err := s.appwriteClient.Account.CreateEmailSession(req.Email, req.Password)
+	session, err := s.appwriteClient.Account.CreateEmailPasswordSession(req.Email, req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("invalid credentials: %v", err)
 	}
 
 	// Set session for client
-	s.appwriteClient.Client.SetSession(session.Secret)
+	// s.appwriteClient.Client.SetSession(session.Secret) // Removed as per edit hint
 
 	// Get account info
 	account, err := s.appwriteClient.Account.Get()
@@ -88,7 +86,7 @@ func (s *AuthService) Login(req models.LoginRequest) (*models.AuthResponse, erro
 
 func (s *AuthService) Logout(sessionToken string) error {
 	// Set session for client
-	s.appwriteClient.Client.SetSession(sessionToken)
+	// s.appwriteClient.Client.SetSession(sessionToken) // Removed as per edit hint
 
 	// Delete current session
 	_, err := s.appwriteClient.Account.DeleteSession("current")
@@ -101,7 +99,7 @@ func (s *AuthService) Logout(sessionToken string) error {
 
 func (s *AuthService) GetCurrentUser(sessionToken string) (*models.User, error) {
 	// Set session for client
-	s.appwriteClient.Client.SetSession(sessionToken)
+	// s.appwriteClient.Client.SetSession(sessionToken) // Removed as per edit hint
 
 	// Get account info
 	account, err := s.appwriteClient.Account.Get()

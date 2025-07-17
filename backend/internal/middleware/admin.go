@@ -32,7 +32,7 @@ func AdminMiddleware(appwriteClient *database.AppwriteClient) gin.HandlerFunc {
 		}
 
 		var user models.User
-		if err := mapDocumentToUser(doc.Data, &user); err != nil {
+		if err := mapDocumentToUser(doc, &user); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user data"})
 			c.Abort()
 			return
@@ -50,7 +50,7 @@ func AdminMiddleware(appwriteClient *database.AppwriteClient) gin.HandlerFunc {
 	}
 }
 
-func SuperAdminMiddleware(appwriteClient *appwrite.AppwriteClient) gin.HandlerFunc {
+func SuperAdminMiddleware(appwriteClient *database.AppwriteClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID, exists := c.Get("userID")
 		if !exists {
@@ -73,7 +73,7 @@ func SuperAdminMiddleware(appwriteClient *appwrite.AppwriteClient) gin.HandlerFu
 		}
 
 		var user models.User
-		if err := mapDocumentToUser(doc.Data, &user); err != nil {
+		if err := mapDocumentToUser(doc, &user); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to parse user data"})
 			c.Abort()
 			return

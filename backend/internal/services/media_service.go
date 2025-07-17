@@ -3,44 +3,56 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"nothing-community-backend/internal/database"
 	"nothing-community-backend/internal/models"
-	"path/filepath"
 	"strings"
 
-	"github.com/appwrite/sdk-for-go/appwrite"
+	"github.com/appwrite/sdk-for-go/file"
 )
 
 type MediaService struct {
 	appwriteClient *database.AppwriteClient
 }
 
+func NewMediaService(appwriteClient *database.AppwriteClient) *MediaService {
 	return &MediaService{
 		appwriteClient: appwriteClient,
 	}
 }
 
-func (s *MediaService) UploadMedia(userID string, file *multipart.FileHeader) (*models.UploadMediaResponse, error) {
+func (s *MediaService) UploadMedia(userID string, fileHeader *multipart.FileHeader) (*models.UploadMediaResponse, error) {
 	// Validate file type
-	mediaType, err := s.getMediaType(file.Header.Get("Content-Type"))
+	mediaType, err := s.getMediaType(fileHeader.Header.Get("Content-Type"))
 	if err != nil {
 		return nil, err
 	}
 
 	// Open file
-	src, err := file.Open()
+	src, err := fileHeader.Open()
 	if err != nil {
 		return nil, err
 	}
 	defer src.Close()
 
+	// Read file data
+	fileData, err := io.ReadAll(src)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %v", err)
+	}
+
+	// Create Appwrite InputFile
+	inputFile := file.InputFile{
+		Name: fileHeader.Filename,
+		Data: fileData,
+	}
+
 	// Upload to Appwrite Storage
 	uploadedFile, err := s.appwriteClient.Storage.CreateFile(
 		s.appwriteClient.Config.AppwriteStorageBucketID,
-		appwrite.ID.Unique(),
-		src,
-		nil,
+		"unique()",
+		inputFile,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to upload file: %v", err)
@@ -59,18 +71,17 @@ func (s *MediaService) UploadMedia(userID string, file *multipart.FileHeader) (*
 		"user_id":   userID,
 		"type":      string(mediaType),
 		"url":       fileURL,
-		"name":      file.Filename,
-		"size":      file.Size,
-		"mime_type": file.Header.Get("Content-Type"),
+		"name":      fileHeader.Filename,
+		"size":      fileHeader.Size,
+		"mime_type": fileHeader.Header.Get("Content-Type"),
 		"file_id":   uploadedFile.Id,
 	}
 
 	doc, err := s.appwriteClient.Database.CreateDocument(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteMediaCollectionID,
-		appwrite.ID.Unique(),
+		"unique()",
 		mediaData,
-		nil,
 	)
 	if err != nil {
 		// Clean up uploaded file if database creation fails
@@ -85,9 +96,9 @@ func (s *MediaService) UploadMedia(userID string, file *multipart.FileHeader) (*
 		ID:       doc.Id,
 		Type:     mediaType,
 		URL:      fileURL,
-		Name:     file.Filename,
-		Size:     file.Size,
-		MimeType: file.Header.Get("Content-Type"),
+		Name:     fileHeader.Filename,
+		Size:     fileHeader.Size,
+		MimeType: fileHeader.Header.Get("Content-Type"),
 	}, nil
 }
 
@@ -96,14 +107,13 @@ func (s *MediaService) GetMedia(mediaID string) (*models.Media, error) {
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteMediaCollectionID,
 		mediaID,
-		nil,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	var media models.Media
-	if err := s.mapDocumentToMedia(doc.Data, &media); err != nil {
+	if err := s.mapDocumentToMedia(doc, &media); err != nil {
 		return nil, err
 	}
 
@@ -154,7 +164,7 @@ func (s *MediaService) GetMediaByUser(userID string) ([]models.Media, error) {
 	docs, err := s.appwriteClient.Database.ListDocuments(
 		s.appwriteClient.Config.AppwriteDatabaseID,
 		s.appwriteClient.Config.AppwriteMediaCollectionID,
-		queries,
+		s.appwriteClient.Database.WithListDocumentsQueries(queries),
 	)
 	if err != nil {
 		return nil, err
@@ -163,7 +173,7 @@ func (s *MediaService) GetMediaByUser(userID string) ([]models.Media, error) {
 	var mediaList []models.Media
 	for _, doc := range docs.Documents {
 		var media models.Media
-		if err := s.mapDocumentToMedia(doc.Data, &media); err != nil {
+		if err := s.mapDocumentToMedia(doc, &media); err != nil {
 			continue
 		}
 		media.ID = doc.Id
