@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"net/http"
+	"net/url"
 	"nothing-community-backend/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -48,7 +49,9 @@ func (h *OAuthHandler) GoogleCallback(c *gin.Context) {
 	}
 	authResponse, err := h.oauthService.HandleGoogleCallback(ctx, code)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Redirect to frontend with error message
+		redirectURL := "http://localhost:5173/oauth/callback?error=" + url.QueryEscape(err.Error())
+		c.Redirect(http.StatusTemporaryRedirect, redirectURL)
 		return
 	}
 	c.SetCookie("session_token", authResponse.Session, 86400*7, "/", "", false, true)
@@ -87,7 +90,9 @@ func (h *OAuthHandler) GitHubCallback(c *gin.Context) {
 	}
 	authResponse, err := h.oauthService.HandleGitHubCallback(ctx, code)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		// Redirect to frontend with error message
+		redirectURL := "http://localhost:5173/oauth/callback?error=" + url.QueryEscape(err.Error())
+		c.Redirect(http.StatusTemporaryRedirect, redirectURL)
 		return
 	}
 	c.SetCookie("session_token", authResponse.Session, 86400*7, "/", "", false, true)

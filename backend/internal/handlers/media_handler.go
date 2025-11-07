@@ -36,6 +36,22 @@ func (h *MediaHandler) UploadMedia(c *gin.Context) {
 		return
 	}
 
+	// Validate file type
+	supportedTypes := map[string]bool{
+		"image/jpeg": true,
+		"image/png":  true,
+		"image/gif":  true,
+		"image/webp": true,
+		"video/mp4":  true,
+		"video/webm": true,
+		"video/ogg":  true,
+		"video/mov":  true,
+	}
+	if !supportedTypes[file.Header.Get("Content-Type")] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unsupported file type"})
+		return
+	}
+
 	media, err := h.mediaService.UploadMedia(userID.(string), file)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

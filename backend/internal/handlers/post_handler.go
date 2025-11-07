@@ -35,6 +35,40 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		return
 	}
 
+	// Server-side validation
+	if len(req.Title) < 1 || len(req.Title) > 200 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Title must be 1-200 characters"})
+		return
+	}
+	if len(req.Content) < 1 || len(req.Content) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Content must be 1-2000 characters"})
+		return
+	}
+	validCategories := map[models.PostCategory]bool{
+		models.CategoryGeneral: true,
+		models.CategoryTech:    true,
+		models.CategoryReviews: true,
+		models.CategoryUpdates: true,
+		models.CategoryGists:   true,
+		models.CategoryBanter:  true,
+	}
+	if !validCategories[req.Category] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid category"})
+		return
+	}
+	if len(req.Tags) > 10 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Too many tags (max 10)"})
+		return
+	}
+	if req.MediaIDs != nil && len(req.MediaIDs) > 0 {
+		for _, id := range req.MediaIDs {
+			if len(id) == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid media ID"})
+				return
+			}
+		}
+	}
+
 	if err := h.validator.Struct(req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

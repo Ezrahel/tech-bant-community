@@ -1,9 +1,18 @@
 export interface User {
   id: string;
   name: string;
+  email?: string;
   avatar: string;
+  bio?: string;
+  location?: string;
+  website?: string;
   isAdmin: boolean;
   isVerified: boolean;
+  isActive?: boolean;
+  role?: string;
+  provider?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Post {
@@ -43,5 +52,4 @@ export interface PostCategory {
   description: string;
 }
 
-export type PageType = 'home' | 'discussions' | 'reviews' | 'support' | 'new-post' | 'login' | 'signup';
-export type PageType = 'home' | 'discussions' | 'reviews' | 'support' | 'new-post' | 'login' | 'signup' | 'admin';
+export type PageType = 'login' | 'signup' | 'home' | 'new-post' | 'discussions' | 'reviews' | 'support' | 'admin';

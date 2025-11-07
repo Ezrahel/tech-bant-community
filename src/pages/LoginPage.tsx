@@ -1,24 +1,18 @@
 import React, { useState } from 'react';
 import { Mail, Lock, ArrowRight, Github, Chrome } from 'lucide-react';
-import { PageType } from '../types';
 import { authService } from '../services/auth';
+import { useNavigate } from 'react-router-dom';
 
-interface LoginPageProps {
-  setCurrentPage: (page: PageType) => void;
-  setIsAuthenticated: (auth: boolean) => void;
-}
-
-const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, setIsAuthenticated }) => {
+const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const navigate = useNavigate();
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    
     authService.login({ email, password })
       .then(() => {
-        setIsAuthenticated(true);
-        setCurrentPage('home');
+        navigate('/');
       })
       .catch((error) => {
         console.error('Login failed:', error);
@@ -141,7 +135,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ setCurrentPage, setIsAuthenticate
           <div className="text-center mt-6">
             <span className="text-gray-400 text-sm">Don't have an account? </span>
             <button 
-              onClick={() => setCurrentPage('signup')}
+              onClick={() => navigate('/signup')}
               className="text-white hover:text-gray-300 transition-colors text-sm font-medium"
             >
               Sign up

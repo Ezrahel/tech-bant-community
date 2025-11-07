@@ -1,4 +1,4 @@
-import { databases, storage, ID } from '../lib/appwrite';
+import { databases, storage, account, ID } from '../lib/appwrite';
 import { Post, PostCategory } from '../types';
 
 const DATABASE_ID = 'nothing-community-db';
@@ -91,6 +91,21 @@ export const postsService = {
   // Upload media file
   async uploadMedia(file: File) {
     try {
+      // Validate file size (10MB limit)
+      if (file.size > 10 * 1024 * 1024) {
+        throw new Error('File size too large (max 10MB)');
+      }
+
+      // Validate file type
+      const validTypes = [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'video/mp4', 'video/webm', 'video/ogg', 'video/mov'
+      ];
+      
+      if (!validTypes.includes(file.type)) {
+        throw new Error('Unsupported file type');
+      }
+
       const uploadedFile = await storage.createFile(
         STORAGE_BUCKET_ID,
         ID.unique(),

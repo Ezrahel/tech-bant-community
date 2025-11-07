@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { PageType } from './types';
 import { samplePosts, categories, postCategories } from './data/sampleData';
 import { authService } from './services/auth';
@@ -11,40 +12,29 @@ import DiscussionsPage from './pages/DiscussionsPage';
 import ReviewsPage from './pages/ReviewsPage';
 import SupportPage from './pages/SupportPage';
 import AdminDashboard from './pages/AdminDashboard';
+import DuplicateUserErrorPage from './pages/DuplicateUserErrorPage';
+import OAuthCallbackPage from './pages/OAuthCallbackPage';
+import UserProfilePage from './pages/UserProfilePage';
 
-function App() {
-  const [currentPage, setCurrentPage] = useState<PageType>('login');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAdmin, setIsAdmin] = useState(false);
+function ProtectedRoute({ children, adminOnly = false }: { children: React.ReactNode; adminOnly?: boolean }) {
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const location = useLocation();
 
-  // Check authentication status on app load
   useEffect(() => {
     authService.isAuthenticated()
       .then((authenticated) => {
         setIsAuthenticated(authenticated);
         if (authenticated) {
-          // Check if user is admin by trying to get current user
-          authService.getCurrentUser()
-            .then((user) => {
-              // Check if user email matches admin email
-              const isAdminUser = user?.email === 'ditech@ditechagency.com';
-              setIsAdmin(isAdminUser);
-              setCurrentPage(isAdminUser ? 'admin' : 'home');
-            })
-            .catch(() => {
-              setCurrentPage('home');
-            });
+          authService.getCurrentUser().then((user) => {
+            const isAdminUser = user?.email === 'ditech@ditechagency.com';
+            setIsAdmin(isAdminUser);
+          });
         }
-      })
-      .finally(() => {
-        setIsLoading(false);
       });
   }, []);
 
-  if (isLoading) {
+  if (isAuthenticated === null) {
     return (
       <div className="min-h-screen bg-black text-white flex items-center justify-center">
         <div className="text-center">
@@ -57,64 +47,104 @@ function App() {
     );
   }
 
-  const filteredPosts = samplePosts.filter(post => {
-    const matchesCategory = selectedCategory === 'all' || post.category === selectedCategory;
-    const matchesSearch = searchQuery === '' || 
-      post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesCategory && matchesSearch;
-  });
-
-  // Show auth pages if not authenticated
   if (!isAuthenticated) {
-    if (currentPage === 'signup') {
-      return <SignupPage setCurrentPage={setCurrentPage} setIsAuthenticated={setIsAuthenticated} />;
-    }
-    return <LoginPage setCurrentPage={setCurrentPage} setIsAuthenticated={setIsAuthenticated} />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  const getPageContent = () => {
-    switch (currentPage) {
-      case 'new-post':
-        return <NewPostPage setCurrentPage={setCurrentPage} postCategories={postCategories} />;
-      case 'discussions':
-        return <DiscussionsPage setCurrentPage={setCurrentPage} />;
-      case 'reviews':
-        return <ReviewsPage setCurrentPage={setCurrentPage} />;
-      case 'support':
-        return <SupportPage />;
-      case 'admin':
-        return <AdminDashboard />;
-      default:
-        return (
-          <HomePage 
-            posts={filteredPosts}
-            categories={categories}
-            selectedCategory={selectedCategory}
-            setSelectedCategory={setSelectedCategory}
-          />
-        );
-    }
-  };
+  if (adminOnly && !isAdmin) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function App() {
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredPosts = samplePosts;
 
   return (
-    <div className="min-h-screen bg-black text-white">
-      <Header 
-        currentPage={currentPage}
-        setCurrentPage={setCurrentPage}
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-      />
-
+    <BrowserRouter>
+      <Header searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
       <div className="max-w-6xl mx-auto px-4 py-6">
-        {currentPage === 'new-post' ? (
-          getPageContent()
-        ) : (
-          getPageContent()
-        )}
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
+          <Route path="/duplicate-user-error" element={<DuplicateUserErrorPage />} />
+          <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute adminOnly>
+                <AdminDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/new-post"
+            element={
+              <ProtectedRoute>
+                <NewPostPage postCategories={postCategories} />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <UserProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile/:userId"
+            element={
+              <ProtectedRoute>
+                <UserProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/discussions"
+            element={
+              <ProtectedRoute>
+                <DiscussionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reviews"
+            element={
+              <ProtectedRoute>
+                <ReviewsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/support"
+            element={
+              <ProtectedRoute>
+                <SupportPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <HomePage
+                  posts={filteredPosts}
+                  categories={categories}
+                  selectedCategory={"all"}
+                  setSelectedCategory={() => {}}
+                />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </div>
-    </div>
+    </BrowserRouter>
   );
 }
 

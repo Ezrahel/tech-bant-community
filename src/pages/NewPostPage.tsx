@@ -1,25 +1,33 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, DragEvent } from 'react';
 import { X, ChevronDown, Image, Film, Upload, Smile, Calendar, MapPin, Play, FileImage } from 'lucide-react';
-import { PageType, PostCategory, MediaAttachment } from '../types';
+import { PostCategory, MediaAttachment } from '../types';
 import { postsService } from '../services/posts';
+import { useNavigate } from 'react-router-dom';
 
 interface NewPostPageProps {
-  setCurrentPage: (page: PageType) => void;
   postCategories: PostCategory[];
 }
 
-const NewPostPage: React.FC<NewPostPageProps> = ({ setCurrentPage, postCategories }) => {
+const NewPostPage: React.FC<NewPostPageProps> = ({ postCategories }) => {
   const [postTitle, setPostTitle] = useState('');
   const [postContent, setPostContent] = useState('');
-  const [postCategory, setPostCategory] = useState('general');
+  const [postCategory, setPostCategory] = useState(postCategories[0]?.id || 'general');
   const [postTags, setPostTags] = useState('');
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [attachedMedia, setAttachedMedia] = useState<MediaAttachment[]>([]);
   const [location, setLocation] = useState('');
+  const [isPosting, setIsPosting] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const navigate = useNavigate();
   
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const gifInputRef = useRef<HTMLInputElement>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const getCategoryColor = (category: string) => {
     const colors = {
@@ -33,67 +41,102 @@ const NewPostPage: React.FC<NewPostPageProps> = ({ setCurrentPage, postCategorie
     return colors[category as keyof typeof colors] || 'text-gray-400';
   };
 
-  const handleCreatePost = () => {
-    const postData = {
-      title: postTitle,
-      content: postContent,
-      category: postCategory as PostCategory,
-      tags: postTags.split(',').map(tag => tag.trim()).filter(tag => tag),
-      location,
-      mediaIds: attachedMedia.map(media => media.id)
-    };
-
-    postsService.createPost(postData)
-      .then(() => {
-        // Reset form and redirect
-        setPostTitle('');
-        setPostContent('');
-        setPostCategory('general');
-        setPostTags('');
-        setAttachedMedia([]);
-        setLocation('');
-        setCurrentPage('home');
-      })
-      .catch((error) => {
-        console.error('Failed to create post:', error);
-        alert('Failed to create post. Please try again.');
-      });
+  const handleCreatePost = async () => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    if (!postTitle.trim() || !postContent.trim()) {
+      setErrorMsg('Title and content are required.');
+      return;
+    }
+    if (uploading) {
+      setErrorMsg('Please wait for all uploads to finish.');
+      return;
+    }
+    // Validate category
+    const validCategory = postCategories.some(c => c.id === postCategory);
+    if (!validCategory) {
+      setErrorMsg('Please select a valid category.');
+      return;
+    }
+    setIsPosting(true);
+    try {
+      const postData = {
+        title: postTitle,
+        content: postContent,
+        category: postCategory as unknown as PostCategory,
+        tags: postTags.split(',').map(tag => tag.trim()).filter(tag => tag),
+        location,
+        mediaIds: attachedMedia.map(media => media.id)
+      };
+      await postsService.createPost(postData);
+      setPostTitle('');
+      setPostContent('');
+      setPostCategory(postCategories[0]?.id || 'general');
+      setPostTags('');
+      setAttachedMedia([]);
+      setLocation('');
+      setSuccessMsg('Post created successfully!');
+      setTimeout(() => {
+        setSuccessMsg(null);
+        navigate('/');
+      }, 1200);
+    } catch (error) {
+      console.error('Failed to create post:', error);
+      setErrorMsg('Failed to create post. Please ensure you are logged in and try again.');
+    } finally {
+      setIsPosting(false);
+    }
   };
 
   const handleFileUpload = (type: 'image' | 'video' | 'gif', files: FileList | null) => {
     if (!files || files.length === 0) return;
-
-    Array.from(files).forEach((file) => {
-      // Validate file type
-      const validTypes = {
-        image: ['image/jpeg', 'image/png', 'image/gif', 'image/webp'],
-        video: ['video/mp4', 'video/webm', 'video/ogg'],
-        gif: ['image/gif']
-      };
-
+    setUploading(true);
+    setErrorMsg(null);
+    const validTypes = {
+      image: ['image/jpeg', 'image/png', 'image/gif', 'image/jpg', 'image/webp'],
+      video: ['video/mp4', 'video/webm', 'video/ogg', 'video/mov'],
+      gif: ['image/gif']
+    };
+    Array.from(files).forEach(async (file) => {
       if (!validTypes[type].includes(file.type)) {
-        alert(`Please select a valid ${type} file.`);
+        setErrorMsg(`Please select a valid ${type} file.`);
+        setUploading(false);
         return;
       }
-
-
-      // Upload to Appwrite
-      postsService.uploadMedia(file)
-        .then((uploadedMedia) => {
-          const newMedia: MediaAttachment = {
-            id: uploadedMedia.id,
+      try {
+        setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
+        // Simulate progress (Appwrite SDK does not provide progress natively)
+        let progress = 0;
+        const interval = setInterval(() => {
+          progress += 20;
+          setUploadProgress(prev => ({ ...prev, [file.name]: Math.min(progress, 95) }));
+        }, 200);
+        const uploadedMedia = await postsService.uploadMedia(file);
+        clearInterval(interval);
+        setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
+        setAttachedMedia(prev => [
+          ...prev,
+          {
+            ...uploadedMedia,
             type: uploadedMedia.type as 'image' | 'video' | 'gif',
-            url: uploadedMedia.url,
-            name: uploadedMedia.name,
-            size: uploadedMedia.size
-          };
-          
-          setAttachedMedia(prev => [...prev, newMedia]);
-        })
-        .catch((error) => {
-          console.error('Failed to upload media:', error);
-          alert('Failed to upload media. Please try again.');
+          }
+        ]);
+        setTimeout(() => {
+          setUploadProgress(prev => {
+            const { [file.name]: _, ...rest } = prev;
+            return rest;
+          });
+        }, 1000);
+      } catch (error) {
+        console.error('Failed to upload media:', error);
+        setErrorMsg('Failed to upload media. Please try again.');
+        setUploadProgress(prev => {
+          const { [file.name]: _, ...rest } = prev;
+          return rest;
         });
+      } finally {
+        setUploading(false);
+      }
     });
   };
 
@@ -132,13 +175,57 @@ const NewPostPage: React.FC<NewPostPageProps> = ({ setCurrentPage, postCategorie
     }
   };
 
+  // Drag-and-drop handlers for file upload
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      // Only allow images/videos/gifs
+      const files = Array.from(e.dataTransfer.files).filter(file =>
+        file.type.startsWith('image/') || file.type.startsWith('video/') || file.type === 'image/gif'
+      );
+      if (files.length > 0) {
+        // Guess type by first file
+        const type = files[0].type.startsWith('image/') ? 'image' : files[0].type.startsWith('video/') ? 'video' : 'gif';
+        handleFileUpload(type as 'image' | 'video' | 'gif', files as unknown as FileList);
+      }
+    }
+  };
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+  };
+
+  // Drag-and-drop for reordering media
+  const handleDragStartMedia = (index: number) => setDraggedIndex(index);
+  const handleDropMedia = (index: number) => {
+    if (draggedIndex === null || draggedIndex === index) return;
+    setAttachedMedia(prev => {
+      const updated = [...prev];
+      const [removed] = updated.splice(draggedIndex, 1);
+      updated.splice(index, 0, removed);
+      return updated;
+    });
+    setDraggedIndex(null);
+  };
+  const handleDragEndMedia = () => setDraggedIndex(null);
+
   return (
-    <div className="max-w-2xl mx-auto">
+    <div
+      className={`max-w-2xl mx-auto ${dragOver ? 'ring-4 ring-blue-500' : ''}`}
+      onDrop={handleDrop}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+    >
       <div className="bg-gray-900/30 border border-gray-800 rounded-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-800">
           <button 
-            onClick={() => setCurrentPage('home')}
+            onClick={() => navigate('/')}
             className="p-2 hover:bg-gray-800 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
@@ -146,10 +233,10 @@ const NewPostPage: React.FC<NewPostPageProps> = ({ setCurrentPage, postCategorie
           <h2 className="text-lg font-semibold">Create Post</h2>
           <button 
             onClick={handleCreatePost}
-            disabled={!postTitle.trim() || !postContent.trim()}
+            disabled={!postTitle.trim() || !postContent.trim() || isPosting || uploading}
             className="bg-white text-black px-6 py-2 rounded-full font-medium text-sm hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Post
+            {isPosting ? 'Posting...' : 'Post'}
           </button>
         </div>
 
@@ -241,56 +328,37 @@ const NewPostPage: React.FC<NewPostPageProps> = ({ setCurrentPage, postCategorie
                 </div>
               )}
 
-              {/* Media Attachments */}
+              {/* Media Previews with drag-and-drop reordering */}
               {attachedMedia.length > 0 && (
-                <div className="space-y-3">
-                  {attachedMedia.map((media) => (
-                    <div key={media.id} className="relative bg-gray-800 rounded-lg overflow-hidden">
-                      {media.type === 'image' ? (
-                        <div className="relative">
-                          <img 
-                            src={media.url} 
-                            alt={media.name}
-                            className="w-full h-48 object-cover"
-                          />
-                          <button
-                            onClick={() => removeMedia(media.id)}
-                            className="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : media.type === 'video' ? (
-                        <div className="relative">
-                          <video 
-                            src={media.url}
-                            className="w-full h-48 object-cover"
-                            controls
-                          />
-                          <button
-                            onClick={() => removeMedia(media.id)}
-                            className="absolute top-2 right-2 p-1 bg-black/50 rounded-full text-white hover:bg-black/70 transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-between p-3">
-                          <div className="flex items-center space-x-3">
-                            <FileImage className="w-8 h-8 text-gray-400" />
-                            <div>
-                              <div className="text-sm font-medium text-white">{media.name}</div>
-                              <div className="text-xs text-gray-400">{formatFileSize(media.size)}</div>
-                            </div>
-                          </div>
-                          <button
-                            onClick={() => removeMedia(media.id)}
-                            className="text-gray-500 hover:text-white transition-colors"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
+                <div className="mb-4 grid grid-cols-2 gap-4">
+                  {attachedMedia.map((media, idx) => (
+                    <div
+                      key={media.id}
+                      className={`relative group rounded-xl overflow-hidden bg-gray-800 border border-gray-700 flex items-center justify-center aspect-square ${draggedIndex === idx ? 'ring-4 ring-blue-400' : ''}`}
+                      draggable
+                      onDragStart={() => handleDragStartMedia(idx)}
+                      onDrop={() => handleDropMedia(idx)}
+                      onDragEnd={handleDragEndMedia}
+                      onDragOver={e => e.preventDefault()}
+                    >
+                      {media.type === 'image' && (
+                        <img src={media.url} alt={media.name} className="object-cover w-full h-full" />
                       )}
+                      {media.type === 'video' && (
+                        <video src={media.url} controls className="object-cover w-full h-full" />
+                      )}
+                      {media.type === 'gif' && (
+                        <img src={media.url} alt={media.name} className="object-cover w-full h-full" />
+                      )}
+                      <button
+                        onClick={() => removeMedia(media.id)}
+                        className="absolute top-2 right-2 bg-black/70 hover:bg-black/90 text-white rounded-full p-1 z-10"
+                        title="Remove"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                      {/* Drag handle icon (optional) */}
+                      <div className="absolute bottom-2 left-2 text-xs text-gray-400 opacity-70 cursor-move select-none">⇅</div>
                     </div>
                   ))}
                 </div>
@@ -369,6 +437,28 @@ const NewPostPage: React.FC<NewPostPageProps> = ({ setCurrentPage, postCategorie
         className="hidden"
         onChange={(e) => handleFileUpload('gif', e.target.files)}
       />
+      {errorMsg && (
+        <div className="text-red-400 text-sm mb-2">{errorMsg}</div>
+      )}
+      {successMsg && (
+        <div className="text-green-400 text-sm mb-2">{successMsg}</div>
+      )}
+      {uploading && (
+        <div className="text-blue-400 text-sm mb-2">Uploading media...</div>
+      )}
+      {Object.keys(uploadProgress).length > 0 && (
+        <div className="mb-2 space-y-1">
+          {Object.entries(uploadProgress).map(([name, progress]) => (
+            <div key={name} className="flex items-center space-x-2">
+              <span className="text-xs text-gray-400">{name}</span>
+              <div className="flex-1 bg-gray-800 rounded-full h-2">
+                <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${progress}%` }}></div>
+              </div>
+              <span className="text-xs text-gray-400">{progress}%</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

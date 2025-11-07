@@ -1,35 +1,36 @@
 import React, { useState } from 'react';
 import { Mail, Lock, User, ArrowRight, Github, Chrome } from 'lucide-react';
-import { PageType } from '../types';
 import { authService } from '../services/auth';
+import { useNavigate } from 'react-router-dom';
 
-interface SignupPageProps {
-  setCurrentPage: (page: PageType) => void;
-  setIsAuthenticated: (auth: boolean) => void;
-}
-
-const SignupPage: React.FC<SignupPageProps> = ({ setCurrentPage, setIsAuthenticated }) => {
+const SignupPage: React.FC = () => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const navigate = useNavigate();
 
   const handleSignup = (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (password !== confirmPassword) {
       alert('Passwords do not match');
       return;
     }
-    
     authService.register({ name, email, password })
       .then(() => {
-        setIsAuthenticated(true);
-        setCurrentPage('home');
+        navigate('/');
       })
       .catch((error) => {
         console.error('Registration failed:', error);
-        alert('Registration failed. Please try again.');
+        // Check for duplicate user error
+        if (
+          error?.response?.data?.error?.includes('failed to create account') &&
+          error?.response?.data?.error?.includes('already exists')
+        ) {
+          window.location.href = '/duplicate-user-error';
+        } else {
+          alert('Registration failed. Please try again.');
+        }
       });
   };
 
@@ -177,7 +178,7 @@ const SignupPage: React.FC<SignupPageProps> = ({ setCurrentPage, setIsAuthentica
           <div className="text-center mt-6">
             <span className="text-gray-400 text-sm">Already have an account? </span>
             <button 
-              onClick={() => setCurrentPage('login')}
+              onClick={() => navigate('/login')}
               className="text-white hover:text-gray-300 transition-colors text-sm font-medium"
             >
               Sign in

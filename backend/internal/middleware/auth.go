@@ -12,15 +12,18 @@ import (
 func AuthMiddleware(appwriteClient *database.AppwriteClient) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authorization header required"})
-			c.Abort()
-			return
+		var sessionToken string
+		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+			sessionToken = strings.TrimPrefix(authHeader, "Bearer ")
+		} else {
+			// Try to get session_token from cookie
+			cookie, err := c.Cookie("session_token")
+			if err == nil {
+				sessionToken = cookie
+			}
 		}
-
-		sessionToken := strings.TrimPrefix(authHeader, "Bearer ")
-		if sessionToken == authHeader {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Bearer token required"})
+		if sessionToken == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "No session token provided"})
 			c.Abort()
 			return
 		}

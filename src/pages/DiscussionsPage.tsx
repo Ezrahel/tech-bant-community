@@ -1,13 +1,10 @@
 import React from 'react';
 import { MessageSquare } from 'lucide-react';
-import { PageType } from '../types';
 import Sidebar from '../components/Sidebar';
+import { useNavigate } from 'react-router-dom';
 
-interface DiscussionsPageProps {
-  setCurrentPage: (page: PageType) => void;
-}
-
-const DiscussionsPage: React.FC<DiscussionsPageProps> = ({ setCurrentPage }) => {
+const DiscussionsPage: React.FC = () => {
+  const navigate = useNavigate();
   return (
     <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
       <Sidebar 
@@ -23,7 +20,7 @@ const DiscussionsPage: React.FC<DiscussionsPageProps> = ({ setCurrentPage }) => 
           <h2 className="text-2xl font-bold mb-2">Community Discussions</h2>
           <p className="text-gray-400 mb-6">Join conversations with fellow Nothing enthusiasts</p>
           <button 
-            onClick={() => setCurrentPage('new-post')}
+            onClick={() => navigate('/new-post')}
             className="bg-white text-black px-6 py-3 rounded-full hover:bg-gray-200 transition-colors text-sm font-medium"
           >
             Start a Discussion
