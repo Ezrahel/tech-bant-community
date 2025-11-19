@@ -1,8 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Search, Plus, User, Bell, Home, MessageSquare, Star, HelpCircle, Settings, LogOut } from 'lucide-react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { authService } from '../services/auth';
-import { userService } from '../services/user';
+import { useUser, useClerk } from '@clerk/clerk-react';
 
 interface HeaderProps {
   searchQuery: string;
@@ -12,27 +11,13 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-
-  useEffect(() => {
-    loadCurrentUser();
-  }, []);
-
-  const loadCurrentUser = async () => {
-    try {
-      const user = await authService.getCurrentUser();
-      if (user) {
-        setCurrentUser(user);
-      }
-    } catch (error) {
-      console.error('Failed to load current user:', error);
-    }
-  };
+  const { user } = useUser();
+  const { signOut } = useClerk();
 
   const handleLogout = async () => {
     try {
-      await authService.logout();
+      await signOut();
       navigate('/login');
     } catch (error) {
       console.error('Logout error:', error);
@@ -113,10 +98,10 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
                 className="w-8 h-8 bg-gray-700 rounded-full flex items-center justify-center cursor-pointer hover:bg-gray-600 transition-colors"
               >
-                {currentUser?.avatar ? (
+                {user?.imageUrl ? (
                   <img 
-                    src={currentUser.avatar} 
-                    alt={currentUser.name} 
+                    src={user.imageUrl} 
+                    alt={user.fullName || user.username || 'User'} 
                     className="w-8 h-8 rounded-full object-cover"
                   />
                 ) : (
@@ -127,8 +112,8 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
               {showProfileMenu && (
                 <div className="absolute right-0 mt-2 w-48 bg-gray-900 border border-gray-700 rounded-xl shadow-xl z-50">
                   <div className="p-3 border-b border-gray-700">
-                    <div className="text-sm font-medium text-white">{currentUser?.name || 'User'}</div>
-                    <div className="text-xs text-gray-400">{currentUser?.email}</div>
+                    <div className="text-sm font-medium text-white">{user?.fullName || user?.username || 'User'}</div>
+                    <div className="text-xs text-gray-400">{user?.primaryEmailAddress?.emailAddress}</div>
                   </div>
                   <div className="p-1">
                     <button
@@ -141,7 +126,7 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                       <User className="w-4 h-4" />
                       <span>Profile</span>
                     </button>
-                    {currentUser?.email === 'ditech@ditechagency.com' && (
+                    {user?.primaryEmailAddress?.emailAddress === 'ditech@ditechagency.com' && (
                       <button
                         onClick={() => {
                           navigate('/admin');
