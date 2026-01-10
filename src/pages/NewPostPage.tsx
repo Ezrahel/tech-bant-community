@@ -1,464 +1,431 @@
+// New post page with Apple design philosophy
 import React, { useState, useRef, DragEvent } from 'react';
-import { X, ChevronDown, Image, Film, Upload, Smile, Calendar, MapPin, Play, FileImage } from 'lucide-react';
-import { PostCategory, MediaAttachment } from '../types';
-import { postsService } from '../services/posts';
+import { X, ChevronDown, Image, Film, Upload, MapPin, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { postsService } from '../services/posts';
+import { useAuth } from '../contexts/AuthContext';
 
-interface NewPostPageProps {
-  postCategories: PostCategory[];
-}
+const postCategories = [
+  { id: 'general', name: 'General', description: 'General discussions' },
+  { id: 'tech', name: 'Tech', description: 'Technology topics' },
+  { id: 'reviews', name: 'Reviews', description: 'Product reviews' },
+  { id: 'updates', name: 'Updates', description: 'Updates and news' },
+  { id: 'gists', name: 'Gists', description: 'Code snippets' },
+  { id: 'banter', name: 'Banter', description: 'Casual conversations' },
+];
 
-const NewPostPage: React.FC<NewPostPageProps> = ({ postCategories }) => {
-  const [postTitle, setPostTitle] = useState('');
-  const [postContent, setPostContent] = useState('');
-  const [postCategory, setPostCategory] = useState(postCategories[0]?.id || 'general');
-  const [postTags, setPostTags] = useState('');
-  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [attachedMedia, setAttachedMedia] = useState<MediaAttachment[]>([]);
+const NewPostPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { userProfile } = useAuth();
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [category, setCategory] = useState('general');
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState('');
   const [location, setLocation] = useState('');
+  const [media, setMedia] = useState<Array<{ id: string; url: string; type: string; name: string }>>([]);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [isPosting, setIsPosting] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState<{ [key: string]: number }>({});
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const navigate = useNavigate();
-  
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const gifInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const getCategoryColor = (category: string) => {
-    const colors = {
+  const getCategoryColor = (cat: string) => {
+    const colors: Record<string, string> = {
       general: 'text-gray-400',
       tech: 'text-blue-400',
       reviews: 'text-purple-400',
       updates: 'text-green-400',
       gists: 'text-orange-400',
-      banter: 'text-pink-400'
+      banter: 'text-pink-400',
     };
-    return colors[category as keyof typeof colors] || 'text-gray-400';
+    return colors[cat] || colors.general;
   };
 
-  const handleCreatePost = async () => {
-    setErrorMsg(null);
-    setSuccessMsg(null);
-    if (!postTitle.trim() || !postContent.trim()) {
-      setErrorMsg('Title and content are required.');
-      return;
+  const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && tagInput.trim()) {
+      e.preventDefault();
+      const newTag = tagInput.trim().toLowerCase();
+      if (!tags.includes(newTag) && tags.length < 10) {
+        setTags([...tags, newTag]);
+        setTagInput('');
+      }
     }
-    if (uploading) {
-      setErrorMsg('Please wait for all uploads to finish.');
-      return;
-    }
-    // Validate category
-    const validCategory = postCategories.some(c => c.id === postCategory);
-    if (!validCategory) {
-      setErrorMsg('Please select a valid category.');
-      return;
-    }
-    setIsPosting(true);
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setTags(tags.filter((t) => t !== tagToRemove));
+  };
+
+  const handleFileSelect = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    setUploading(true);
+    setError('');
+
     try {
-      const postData = {
-        title: postTitle,
-        content: postContent,
-        category: postCategory as unknown as PostCategory,
-        tags: postTags.split(',').map(tag => tag.trim()).filter(tag => tag),
-        location,
-        mediaIds: attachedMedia.map(media => media.id)
-      };
-      await postsService.createPost(postData);
-      setPostTitle('');
-      setPostContent('');
-      setPostCategory(postCategories[0]?.id || 'general');
-      setPostTags('');
-      setAttachedMedia([]);
-      setLocation('');
-      setSuccessMsg('Post created successfully!');
-      setTimeout(() => {
-        setSuccessMsg(null);
-        navigate('/');
-      }, 1200);
-    } catch (error) {
-      console.error('Failed to create post:', error);
-      setErrorMsg('Failed to create post. Please ensure you are logged in and try again.');
+      const fileArray = Array.from(files).slice(0, 10 - media.length);
+      
+      for (const file of fileArray) {
+        if (file.size > 10 * 1024 * 1024) {
+          setError(`File ${file.name} is too large (max 10MB)`);
+          continue;
+        }
+
+        const uploaded = await postsService.uploadMedia(file, (progress) => {
+          // Progress callback
+        });
+
+        setMedia((prev) => [
+          ...prev,
+          {
+            id: uploaded.id,
+            url: uploaded.url,
+            type: uploaded.type,
+            name: uploaded.name,
+          },
+        ]);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to upload media');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFileSelect(e.dataTransfer.files);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    if (!title.trim() || title.length > 200) {
+      setError('Title is required and must be less than 200 characters');
+      return;
+    }
+
+    if (!content.trim() || content.length > 10000) {
+      setError('Content is required and must be less than 10000 characters');
+      return;
+    }
+
+    if (tags.length > 10) {
+      setError('Maximum 10 tags allowed');
+      return;
+    }
+
+    setIsPosting(true);
+
+    try {
+      await postsService.createPost({
+        title: title.trim(),
+        content: content.trim(),
+        category: category as any,
+        tags,
+        location: location || undefined,
+        mediaIds: media.map((m) => m.id),
+      });
+
+      navigate('/', { replace: true });
+    } catch (err: any) {
+      setError(err.message || 'Failed to create post');
     } finally {
       setIsPosting(false);
     }
   };
 
-  const handleFileUpload = (type: 'image' | 'video' | 'gif', files: FileList | null) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    setErrorMsg(null);
-    const validTypes = {
-      image: ['image/jpeg', 'image/png', 'image/gif', 'image/jpg', 'image/webp'],
-      video: ['video/mp4', 'video/webm', 'video/ogg', 'video/mov'],
-      gif: ['image/gif']
-    };
-    Array.from(files).forEach(async (file) => {
-      if (!validTypes[type].includes(file.type)) {
-        setErrorMsg(`Please select a valid ${type} file.`);
-        setUploading(false);
-        return;
-      }
-      try {
-        setUploadProgress(prev => ({ ...prev, [file.name]: 0 }));
-        // Simulate progress (Appwrite SDK does not provide progress natively)
-        let progress = 0;
-        const interval = setInterval(() => {
-          progress += 20;
-          setUploadProgress(prev => ({ ...prev, [file.name]: Math.min(progress, 95) }));
-        }, 200);
-        const uploadedMedia = await postsService.uploadMedia(file);
-        clearInterval(interval);
-        setUploadProgress(prev => ({ ...prev, [file.name]: 100 }));
-        setAttachedMedia(prev => [
-          ...prev,
-          {
-            ...uploadedMedia,
-            type: uploadedMedia.type as 'image' | 'video' | 'gif',
-          }
-        ]);
-        setTimeout(() => {
-          setUploadProgress(prev => {
-            const { [file.name]: _, ...rest } = prev;
-            return rest;
-          });
-        }, 1000);
-      } catch (error) {
-        console.error('Failed to upload media:', error);
-        setErrorMsg('Failed to upload media. Please try again.');
-        setUploadProgress(prev => {
-          const { [file.name]: _, ...rest } = prev;
-          return rest;
-        });
-      } finally {
-        setUploading(false);
-      }
-    });
-  };
-
-  const removeMedia = (id: string) => {
-    setAttachedMedia(prev => {
-      const media = prev.find(m => m.id === id);
-      if (media) {
-        URL.revokeObjectURL(media.url);
-      }
-      return prev.filter(m => m.id !== id);
-    });
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          setLocation(`${latitude.toFixed(4)}, ${longitude.toFixed(4)}`);
-        },
-        (error) => {
-          console.error('Error getting location:', error);
-          alert('Unable to get your location. Please check your browser permissions.');
-        }
-      );
-    } else {
-      alert('Geolocation is not supported by this browser.');
-    }
-  };
-
-  // Drag-and-drop handlers for file upload
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragOver(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      // Only allow images/videos/gifs
-      const files = Array.from(e.dataTransfer.files).filter(file =>
-        file.type.startsWith('image/') || file.type.startsWith('video/') || file.type === 'image/gif'
-      );
-      if (files.length > 0) {
-        // Guess type by first file
-        const type = files[0].type.startsWith('image/') ? 'image' : files[0].type.startsWith('video/') ? 'video' : 'gif';
-        handleFileUpload(type as 'image' | 'video' | 'gif', files as unknown as FileList);
-      }
-    }
-  };
-  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragOver(true);
-  };
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setDragOver(false);
-  };
-
-  // Drag-and-drop for reordering media
-  const handleDragStartMedia = (index: number) => setDraggedIndex(index);
-  const handleDropMedia = (index: number) => {
-    if (draggedIndex === null || draggedIndex === index) return;
-    setAttachedMedia(prev => {
-      const updated = [...prev];
-      const [removed] = updated.splice(draggedIndex, 1);
-      updated.splice(index, 0, removed);
-      return updated;
-    });
-    setDraggedIndex(null);
-  };
-  const handleDragEndMedia = () => setDraggedIndex(null);
-
   return (
-    <div
-      className={`max-w-2xl mx-auto ${dragOver ? 'ring-4 ring-blue-500' : ''}`}
-      onDrop={handleDrop}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-    >
-      <div className="bg-gray-900/30 border border-gray-800 rounded-2xl overflow-hidden">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-800">
-          <button 
-            onClick={() => navigate('/')}
-            className="p-2 hover:bg-gray-800 rounded-full transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
-          <h2 className="text-lg font-semibold">Create Post</h2>
-          <button 
-            onClick={handleCreatePost}
-            disabled={!postTitle.trim() || !postContent.trim() || isPosting || uploading}
-            className="bg-white text-black px-6 py-2 rounded-full font-medium text-sm hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isPosting ? 'Posting...' : 'Post'}
-          </button>
-        </div>
+    <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="mb-6">
+        <button
+          onClick={() => navigate(-1)}
+          className="flex items-center space-x-2 text-gray-400 hover:text-white transition-colors text-sm"
+        >
+          <X className="w-4 h-4" />
+          <span>Cancel</span>
+        </button>
+      </div>
 
-        {/* Content */}
-        <div className="p-4">
-          <div className="flex space-x-3">
-            {/* Avatar */}
-            <img 
-              src="https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop" 
-              alt="Your avatar" 
-              className="w-12 h-12 rounded-full flex-shrink-0"
-            />
-            
-            {/* Form */}
-            <div className="flex-1 space-y-4">
-              {/* Category Selector */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-                  className="flex items-center space-x-2 px-3 py-2 bg-gray-800 rounded-full text-sm hover:bg-gray-700 transition-colors"
-                >
-                  <span className={getCategoryColor(postCategory)}>
-                    {postCategories.find(c => c.id === postCategory)?.name}
-                  </span>
-                  <ChevronDown className="w-4 h-4" />
-                </button>
-                
-                {showCategoryDropdown && (
-                  <div className="absolute top-full left-0 mt-2 w-64 bg-gray-900 border border-gray-700 rounded-xl shadow-xl z-10">
-                    {postCategories.map((category) => (
-                      <button
-                        key={category.id}
-                        onClick={() => {
-                          setPostCategory(category.id);
-                          setShowCategoryDropdown(false);
-                        }}
-                        className="w-full text-left px-4 py-3 hover:bg-gray-800 transition-colors first:rounded-t-xl last:rounded-b-xl"
-                      >
-                        <div className={`font-medium ${getCategoryColor(category.id)}`}>
-                          {category.name}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          {category.description}
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Title Input */}
-              <input
-                type="text"
-                placeholder="What's the title of your post?"
-                value={postTitle}
-                onChange={(e) => setPostTitle(e.target.value)}
-                className="w-full text-xl font-semibold bg-transparent border-none outline-none placeholder-gray-500 resize-none"
-              />
-
-              {/* Content Textarea */}
-              <textarea
-                placeholder="What's happening in tech?"
-                value={postContent}
-                onChange={(e) => setPostContent(e.target.value)}
-                rows={6}
-                className="w-full text-lg bg-transparent border-none outline-none placeholder-gray-500 resize-none"
-              />
-
-              {/* Tags Input */}
-              <input
-                type="text"
-                placeholder="Add tags (comma separated)"
-                value={postTags}
-                onChange={(e) => setPostTags(e.target.value)}
-                className="w-full text-sm bg-transparent border-none outline-none placeholder-gray-500"
-              />
-
-              {/* Location Display */}
-              {location && (
-                <div className="flex items-center space-x-2 text-sm text-gray-400">
-                  <MapPin className="w-4 h-4" />
-                  <span>{location}</span>
-                  <button 
-                    onClick={() => setLocation('')}
-                    className="text-gray-500 hover:text-white transition-colors"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
+      <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Header Card */}
+        <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-2xl p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="text-2xl font-semibold text-white">Create Post</h1>
+            <button
+              type="submit"
+              disabled={isPosting || uploading || !title.trim() || !content.trim()}
+              className="bg-white text-black px-6 py-2.5 rounded-xl font-semibold hover:bg-gray-100 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+            >
+              {isPosting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Publishing...</span>
+                </>
+              ) : (
+                <span>Publish</span>
               )}
+            </button>
+          </div>
 
-              {/* Media Previews with drag-and-drop reordering */}
-              {attachedMedia.length > 0 && (
-                <div className="mb-4 grid grid-cols-2 gap-4">
-                  {attachedMedia.map((media, idx) => (
-                    <div
-                      key={media.id}
-                      className={`relative group rounded-xl overflow-hidden bg-gray-800 border border-gray-700 flex items-center justify-center aspect-square ${draggedIndex === idx ? 'ring-4 ring-blue-400' : ''}`}
-                      draggable
-                      onDragStart={() => handleDragStartMedia(idx)}
-                      onDrop={() => handleDropMedia(idx)}
-                      onDragEnd={handleDragEndMedia}
-                      onDragOver={e => e.preventDefault()}
+          {error && (
+            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start space-x-3">
+              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-red-400 text-sm flex-1">{error}</p>
+            </div>
+          )}
+
+          {/* Author Info */}
+          <div className="flex items-center space-x-3 mb-6 pb-6 border-b border-gray-800">
+            {userProfile?.avatar ? (
+              <img
+                src={userProfile.avatar}
+                alt={userProfile.name}
+                className="w-10 h-10 rounded-full"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center">
+                <span className="text-gray-400 text-sm">
+                  {userProfile?.name?.[0]?.toUpperCase() || 'U'}
+                </span>
+              </div>
+            )}
+            <div>
+              <p className="text-sm font-semibold text-white">{userProfile?.name || 'User'}</p>
+              <p className="text-xs text-gray-400">Posting as yourself</p>
+            </div>
+          </div>
+
+          {/* Category Selector */}
+          <div className="relative mb-6">
+            <label className="block text-sm font-medium text-gray-300 mb-2">Category</label>
+            <button
+              type="button"
+              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white hover:bg-gray-800 transition-colors"
+            >
+              <span className={getCategoryColor(category)}>
+                {postCategories.find((c) => c.id === category)?.name}
+              </span>
+              <ChevronDown
+                className={`w-4 h-4 text-gray-400 transition-transform ${
+                  showCategoryDropdown ? 'rotate-180' : ''
+                }`}
+              />
+            </button>
+
+            {showCategoryDropdown && (
+              <>
+                <div className="absolute top-full left-0 right-0 mt-2 bg-gray-900/95 backdrop-blur-xl border border-gray-800 rounded-xl shadow-apple-lg z-50 overflow-hidden">
+                  {postCategories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => {
+                        setCategory(cat.id);
+                        setShowCategoryDropdown(false);
+                      }}
+                      className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors ${
+                        category === cat.id
+                          ? 'bg-gray-800/50 text-white'
+                          : 'text-gray-300 hover:bg-gray-800/30'
+                      }`}
                     >
-                      {media.type === 'image' && (
-                        <img src={media.url} alt={media.name} className="object-cover w-full h-full" />
+                      <div>
+                        <div className={`font-medium ${getCategoryColor(cat.id)}`}>
+                          {cat.name}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">{cat.description}</div>
+                      </div>
+                      {category === cat.id && (
+                        <CheckCircle2 className="w-4 h-4 text-blue-400" />
                       )}
-                      {media.type === 'video' && (
-                        <video src={media.url} controls className="object-cover w-full h-full" />
-                      )}
-                      {media.type === 'gif' && (
-                        <img src={media.url} alt={media.name} className="object-cover w-full h-full" />
+                    </button>
+                  ))}
+                </div>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowCategoryDropdown(false)}
+                />
+              </>
+            )}
+          </div>
+
+          {/* Title */}
+          <div className="mb-6">
+            <label htmlFor="title" className="block text-sm font-medium text-gray-300 mb-2">
+              Title
+            </label>
+            <input
+              id="title"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="What's your post about?"
+              maxLength={200}
+              required
+              className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all text-lg font-semibold"
+            />
+            <p className="text-xs text-gray-500 mt-1 text-right">{title.length}/200</p>
+          </div>
+
+          {/* Content */}
+          <div className="mb-6">
+            <label htmlFor="content" className="block text-sm font-medium text-gray-300 mb-2">
+              Content
+            </label>
+            <textarea
+              id="content"
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              placeholder="Share your thoughts..."
+              rows={12}
+              maxLength={10000}
+              required
+              className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
+            />
+            <p className="text-xs text-gray-500 mt-1 text-right">{content.length}/10000</p>
+          </div>
+
+          {/* Tags */}
+          <div className="mb-6">
+            <label htmlFor="tags" className="block text-sm font-medium text-gray-300 mb-2">
+              Tags ({tags.length}/10)
+            </label>
+            <input
+              id="tags"
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={handleAddTag}
+              placeholder="Add tags and press Enter"
+              className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            />
+            {tags.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center space-x-2 bg-gray-800/50 text-gray-300 px-3 py-1.5 rounded-lg text-sm"
+                  >
+                    <span>#{tag}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      className="hover:text-white transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Location */}
+          <div className="mb-6">
+            <label htmlFor="location" className="block text-sm font-medium text-gray-300 mb-2">
+              Location (optional)
+            </label>
+            <div className="relative">
+              <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
+              <input
+                id="location"
+                type="text"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="Add location"
+                className="w-full pl-12 pr-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              />
+            </div>
+          </div>
+
+          {/* Media Upload Area */}
+          <div
+            onDrop={handleDrop}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={() => setDragOver(false)}
+            className={`mb-6 border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
+              dragOver
+                ? 'border-blue-500 bg-blue-500/10'
+                : 'border-gray-700 bg-gray-800/30 hover:border-gray-600'
+            }`}
+          >
+            {media.length === 0 ? (
+              <div className="space-y-4">
+                <div className="flex justify-center">
+                  <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center">
+                    <Upload className="w-8 h-8 text-gray-500" />
+                  </div>
+                </div>
+                <div>
+                  <p className="text-white font-medium mb-1">Drop files here or click to upload</p>
+                  <p className="text-gray-400 text-sm">
+                    Images, videos (max 10MB each, up to 10 files)
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-gray-800 text-white px-6 py-2.5 rounded-xl hover:bg-gray-700 transition-colors text-sm font-medium"
+                >
+                  Select Files
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  {media.map((item) => (
+                    <div key={item.id} className="relative group">
+                      {item.type === 'image' ? (
+                        <img
+                          src={item.url}
+                          alt={item.name}
+                          className="w-full h-32 object-cover rounded-xl"
+                        />
+                      ) : (
+                        <div className="w-full h-32 bg-gray-800 rounded-xl flex items-center justify-center">
+                          <Film className="w-8 h-8 text-gray-500" />
+                        </div>
                       )}
                       <button
-                        onClick={() => removeMedia(media.id)}
-                        className="absolute top-2 right-2 bg-black/70 hover:bg-black/90 text-white rounded-full p-1 z-10"
-                        title="Remove"
+                        type="button"
+                        onClick={() => setMedia(media.filter((m) => m.id !== item.id))}
+                        className="absolute top-2 right-2 w-6 h-6 bg-black/70 hover:bg-black/90 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <X className="w-4 h-4" />
+                        <X className="w-3 h-3" />
                       </button>
-                      {/* Drag handle icon (optional) */}
-                      <div className="absolute bottom-2 left-2 text-xs text-gray-400 opacity-70 cursor-move select-none">⇅</div>
                     </div>
                   ))}
                 </div>
-              )}
-
-              {/* Actions Bar */}
-              <div className="flex items-center justify-between pt-4 border-t border-gray-800">
-                <div className="flex items-center space-x-4">
-                  <button 
-                    onClick={() => imageInputRef.current?.click()}
-                    className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-full transition-colors"
-                    title="Add image"
-                  >
-                    <Image className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={() => videoInputRef.current?.click()}
-                    className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-full transition-colors"
-                    title="Add video"
-                  >
-                    <Film className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={() => gifInputRef.current?.click()}
-                    className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-full transition-colors"
-                    title="Add GIF"
-                  >
-                    <Upload className="w-5 h-5" />
-                  </button>
-                  <button className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-full transition-colors">
-                    <Smile className="w-5 h-5" />
-                  </button>
-                  <button className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-full transition-colors">
-                    <Calendar className="w-5 h-5" />
-                  </button>
-                  <button 
-                    onClick={getCurrentLocation}
-                    className="p-2 text-blue-400 hover:bg-blue-400/10 rounded-full transition-colors"
-                    title="Add location"
-                  >
-                    <MapPin className="w-5 h-5" />
-                  </button>
-                </div>
-                
-                <div className="text-sm text-gray-500">
-                  {postContent.length}/2000
-                </div>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="text-blue-400 hover:text-blue-300 text-sm font-medium"
+                >
+                  Add more files ({media.length}/10)
+                </button>
               </div>
-            </div>
+            )}
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              onChange={(e) => handleFileSelect(e.target.files)}
+              className="hidden"
+            />
           </div>
         </div>
-      </div>
-
-      {/* Hidden File Inputs */}
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={(e) => handleFileUpload('image', e.target.files)}
-      />
-      <input
-        ref={videoInputRef}
-        type="file"
-        accept="video/*"
-        multiple
-        className="hidden"
-        onChange={(e) => handleFileUpload('video', e.target.files)}
-      />
-      <input
-        ref={gifInputRef}
-        type="file"
-        accept="image/gif"
-        multiple
-        className="hidden"
-        onChange={(e) => handleFileUpload('gif', e.target.files)}
-      />
-      {errorMsg && (
-        <div className="text-red-400 text-sm mb-2">{errorMsg}</div>
-      )}
-      {successMsg && (
-        <div className="text-green-400 text-sm mb-2">{successMsg}</div>
-      )}
-      {uploading && (
-        <div className="text-blue-400 text-sm mb-2">Uploading media...</div>
-      )}
-      {Object.keys(uploadProgress).length > 0 && (
-        <div className="mb-2 space-y-1">
-          {Object.entries(uploadProgress).map(([name, progress]) => (
-            <div key={name} className="flex items-center space-x-2">
-              <span className="text-xs text-gray-400">{name}</span>
-              <div className="flex-1 bg-gray-800 rounded-full h-2">
-                <div className="bg-blue-500 h-2 rounded-full" style={{ width: `${progress}%` }}></div>
-              </div>
-              <span className="text-xs text-gray-400">{progress}%</span>
-            </div>
-          ))}
-        </div>
-      )}
+      </form>
     </div>
   );
 };

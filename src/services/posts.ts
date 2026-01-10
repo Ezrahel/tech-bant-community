@@ -1,9 +1,6 @@
-import { databases, storage, account, ID } from '../lib/appwrite';
+// Posts service using Go backend API
+import { apiClient } from '../lib/api';
 import { Post, PostCategory } from '../types';
-
-const DATABASE_ID = 'nothing-community-db';
-const POSTS_COLLECTION_ID = 'posts';
-const STORAGE_BUCKET_ID = 'media-bucket';
 
 export interface CreatePostData {
   title: string;
@@ -14,118 +11,144 @@ export interface CreatePostData {
   mediaIds?: string[];
 }
 
-export const postsService = {
+export interface GetPostsParams {
+  limit?: number;
+  offset?: number;
+  category?: string;
+}
+
+export interface PostResponse {
+  id: string;
+  title: string;
+  content: string;
+  author_id: string;
+  author: {
+    id: string;
+    name: string;
+    email?: string;
+    avatar: string;
+    isAdmin: boolean;
+    isVerified: boolean;
+  };
+  category: string;
+  tags: string[];
+  likes: number;
+  comments: number;
+  views: number;
+  shares: number;
+  is_pinned: boolean;
+  is_hot: boolean;
+  media?: Array<{
+    id: string;
+    type: string;
+    url: string;
+    name: string;
+    size: number;
+  }>;
+  location?: string;
+  published_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+class PostsService {
   // Create new post
-  async createPost(postData: CreatePostData) {
-    try {
-      const user = await account.get();
-      
-      const post = await databases.createDocument(
-        DATABASE_ID,
-        POSTS_COLLECTION_ID,
-        ID.unique(),
-        {
-          ...postData,
-          author_id: user.$id,
-          author_name: user.name,
-          author_avatar: `https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop`,
-          author_admin: false,
-          author_verified: false,
-          views: 0,
-          likes_count: 0,
-          comments_count: 0,
-          shares_count: 0,
-          is_pinned: false,
-          is_hot: false,
-        }
-      );
-      
-      return post;
-    } catch (error) {
-      console.error('Create post error:', error);
-      throw error;
-    }
-  },
+  async createPost(postData: CreatePostData): Promise<PostResponse> {
+    return apiClient.post<PostResponse>('/posts', postData);
+  }
 
   // Get all posts
-  async getPosts(limit = 20, offset = 0) {
-    try {
-      const posts = await databases.listDocuments(
-        DATABASE_ID,
-        POSTS_COLLECTION_ID,
-        [
-          `limit(${limit})`,
-          `offset(${offset})`,
-          'orderDesc("$createdAt")'
-        ]
-      );
-      
-      return posts.documents;
-    } catch (error) {
-      console.error('Get posts error:', error);
-      throw error;
-    }
-  },
+  async getPosts(params: GetPostsParams = {}): Promise<PostResponse[]> {
+    const queryParams = new URLSearchParams();
+    if (params.limit) queryParams.append('limit', params.limit.toString());
+    if (params.offset) queryParams.append('offset', params.offset.toString());
+    if (params.category) queryParams.append('category', params.category);
+
+    const query = queryParams.toString();
+    return apiClient.get<PostResponse[]>(`/posts${query ? `?${query}` : ''}`);
+  }
+
+  // Get post by ID
+  async getPost(postId: string): Promise<PostResponse> {
+    return apiClient.get<PostResponse>(`/posts/${postId}`);
+  }
 
   // Get posts by category
-  async getPostsByCategory(category: string, limit = 20, offset = 0) {
-    try {
-      const posts = await databases.listDocuments(
-        DATABASE_ID,
-        POSTS_COLLECTION_ID,
-        [
-          `equal("category", "${category}")`,
-          `limit(${limit})`,
-          `offset(${offset})`,
-          'orderDesc("$createdAt")'
-        ]
-      );
-      
-      return posts.documents;
-    } catch (error) {
-      console.error('Get posts by category error:', error);
-      throw error;
-    }
-  },
-
-  // Upload media file
-  async uploadMedia(file: File) {
-    try {
-      // Validate file size (10MB limit)
-      if (file.size > 10 * 1024 * 1024) {
-        throw new Error('File size too large (max 10MB)');
-      }
-
-      // Validate file type
-      const validTypes = [
-        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-        'video/mp4', 'video/webm', 'video/ogg', 'video/mov'
-      ];
-      
-      if (!validTypes.includes(file.type)) {
-        throw new Error('Unsupported file type');
-      }
-
-      const uploadedFile = await storage.createFile(
-        STORAGE_BUCKET_ID,
-        ID.unique(),
-        file
-      );
-      
-      // Get file URL
-      const fileUrl = storage.getFileView(STORAGE_BUCKET_ID, uploadedFile.$id);
-      
-      return {
-        id: uploadedFile.$id,
-        url: fileUrl,
-        name: file.name,
-        size: file.size,
-        type: file.type.startsWith('image/') ? 'image' : 
-              file.type.startsWith('video/') ? 'video' : 'gif'
-      };
-    } catch (error) {
-      console.error('Upload media error:', error);
-      throw error;
-    }
+  async getPostsByCategory(
+    category: string,
+    limit = 20,
+    offset = 0
+  ): Promise<PostResponse[]> {
+    return apiClient.get<PostResponse[]>(
+      `/posts?category=${category}&limit=${limit}&offset=${offset}`
+    );
   }
-};
+
+  // Like/unlike post
+  async likePost(postId: string): Promise<{ message: string }> {
+    return apiClient.post<{ message: string }>(`/posts/${postId}/like`);
+  }
+
+  // Bookmark/unbookmark post
+  async bookmarkPost(postId: string): Promise<{ message: string }> {
+    return apiClient.post<{ message: string }>(`/posts/${postId}/bookmark`);
+  }
+
+  // Update post
+  async updatePost(postId: string, postData: Partial<CreatePostData>): Promise<PostResponse> {
+    return apiClient.put<PostResponse>(`/posts/${postId}`, postData);
+  }
+
+  // Delete post
+  async deletePost(postId: string): Promise<{ message: string }> {
+    return apiClient.delete<{ message: string }>(`/posts/${postId}`);
+  }
+
+  // Upload media
+  async uploadMedia(
+    file: File,
+    onProgress?: (progress: number) => void
+  ): Promise<{
+    id: string;
+    type: string;
+    url: string;
+    name: string;
+    size: number;
+  }> {
+    return apiClient.uploadFile('/media/upload', file, onProgress);
+  }
+
+  // Convert API response to Post type
+  convertToPost(response: PostResponse): Post {
+    return {
+      id: response.id,
+      title: response.title,
+      content: response.content,
+      author: {
+        id: response.author.id,
+        name: response.author.name,
+        email: response.author.email,
+        avatar: response.author.avatar,
+        isAdmin: response.author.isAdmin,
+        isVerified: response.author.isVerified,
+      },
+      category: response.category as Post['category'],
+      tags: response.tags,
+      likes: response.likes,
+      comments: response.comments,
+      views: response.views,
+      publishedAt: response.published_at || response.created_at,
+      isPinned: response.is_pinned,
+      isHot: response.is_hot,
+      media: response.media?.map((m) => ({
+        id: m.id,
+        type: m.type as 'image' | 'video' | 'gif',
+        url: m.url,
+        name: m.name,
+        size: m.size,
+      })),
+    };
+  }
+}
+
+export const postsService = new PostsService();

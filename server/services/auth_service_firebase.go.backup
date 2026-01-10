@@ -1,0 +1,666 @@
+package services
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"tech-bant-community/server/firebase"
+	"tech-bant-community/server/models"
+	"tech-bant-community/server/utils"
+
+	"cloud.google.com/go/firestore"
+	"firebase.google.com/go/v4/auth"
+)
+
+type AuthService struct {
+	maxLoginAttempts   int
+	lockoutDuration    time.Duration
+	passwordMinLength  int
+	sessionExpiry      time.Duration
+	refreshTokenExpiry time.Duration
+}
+
+func NewAuthService() *AuthService {
+	return &AuthService{
+		maxLoginAttempts:   5,
+		lockoutDuration:    15 * time.Minute,
+		passwordMinLength:  8,
+		sessionExpiry:      24 * time.Hour,
+		refreshTokenExpiry: 7 * 24 * time.Hour,
+	}
+}
+
+// Signup creates a new user account
+func (s *AuthService) Signup(ctx context.Context, req *models.AuthRequest, ipAddress, userAgent string) (*models.AuthResponse, error) {
+	// Validate input
+	if err := s.validateEmail(req.Email); err != nil {
+		return nil, err
+	}
+	if err := s.validatePassword(req.Password); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.Name) == "" {
+		return nil, errors.New("name is required")
+	}
+
+	// Check if email already exists (FIXED: Issue #8 - Generic error to prevent enumeration)
+	existingUser, err := s.getUserByEmail(ctx, req.Email)
+	if err == nil && existingUser != nil {
+		s.logSecurityEvent(ctx, "", "signup_attempt", ipAddress, userAgent, false, "email_already_exists")
+		// Use generic error to prevent email enumeration
+		return nil, errors.New("unable to create account")
+	}
+
+	// Create user in Firebase Auth
+	userParams := (&auth.UserToCreate{}).
+		Email(req.Email).
+		Password(req.Password).
+		DisplayName(req.Name).
+		EmailVerified(false)
+
+	authUser, err := firebase.AuthClient.CreateUser(ctx, userParams)
+	if err != nil {
+		s.logSecurityEvent(ctx, "", "signup_attempt", ipAddress, userAgent, false, "firebase_error")
+		return nil, s.sanitizeError(err)
+	}
+
+	// Create custom token for the user
+	customToken, err := firebase.AuthClient.CustomToken(ctx, authUser.UID)
+	if err != nil {
+		firebase.AuthClient.DeleteUser(ctx, authUser.UID)
+		return nil, s.sanitizeError(err)
+	}
+
+	// FIXED: Issue #29 - Use transaction to ensure atomic user creation
+	// Note: Firestore transactions can't span Firebase Auth operations,
+	// so we handle rollback manually if Firestore write fails
+	now := time.Now()
+	user := models.User{
+		ID:             authUser.UID,
+		Name:           req.Name,
+		Email:          req.Email,
+		Avatar:         "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop",
+		IsAdmin:        false,
+		IsVerified:     false,
+		IsActive:       true,
+		Role:           models.RoleUser,
+		Provider:       "email",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		PostsCount:     0,
+		FollowersCount: 0,
+		FollowingCount: 0,
+	}
+
+	userRef := firebase.DB.Collection("users").Doc(authUser.UID)
+	_, err = userRef.Set(ctx, user)
+	if err != nil {
+		// Rollback: delete auth user if Firestore creation fails
+		if delErr := firebase.AuthClient.DeleteUser(ctx, authUser.UID); delErr != nil {
+			s.logSecurityEvent(ctx, authUser.UID, "signup_rollback_failed", ipAddress, userAgent, false, delErr.Error())
+		}
+		return nil, s.sanitizeError(err)
+	}
+
+	// Log successful signup
+	s.logSecurityEvent(ctx, authUser.UID, "signup", ipAddress, userAgent, true, "")
+
+	// Create session
+	session, err := s.createSession(ctx, authUser.UID, customToken, ipAddress, userAgent)
+	if err != nil {
+		return nil, s.sanitizeError(err)
+	}
+
+	// Get user permissions
+	permissions := models.GetRolePermissions(user.Role)
+
+	return &models.AuthResponse{
+		Token:        customToken,
+		RefreshToken: session.ID,
+		ExpiresIn:    int64(s.sessionExpiry.Seconds()),
+		User:         &user,
+		Roles:        []string{user.Role},
+		Permissions:  permissions,
+	}, nil
+}
+
+// Login authenticates a user (FIXED: Issue #6 - Proper password verification)
+func (s *AuthService) Login(ctx context.Context, req *models.AuthRequest, apiKey, ipAddress, userAgent string) (*models.AuthResponse, error) {
+	// Add timeout
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Validate input
+	if err := s.validateEmail(req.Email); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(req.Password) == "" {
+		return nil, errors.New("password is required")
+	}
+
+	// FIXED: Issue #6 - Verify password using Firebase Auth REST API
+	idToken, err := utils.VerifyPasswordWithFirebase(ctx, apiKey, req.Email, req.Password)
+	if err != nil {
+		// FIXED: Issue #8 - Generic error to prevent email enumeration
+		// Don't reveal if user exists or not
+		s.logSecurityEvent(ctx, "", "login_attempt", ipAddress, userAgent, false, "invalid_credentials")
+		return nil, errors.New("invalid credentials")
+	}
+
+	// Verify ID token to get user ID
+	decodedToken, err := firebase.AuthClient.VerifyIDToken(ctx, idToken)
+	if err != nil {
+		s.logSecurityEvent(ctx, "", "login_attempt", ipAddress, userAgent, false, "token_verification_failed")
+		return nil, errors.New("invalid credentials")
+	}
+
+	userID := decodedToken.UID
+
+	// Check account lockout
+	lockout, err := s.getAccountLockout(ctx, userID)
+	if err == nil && lockout != nil {
+		if lockout.LockedUntil.After(time.Now().UTC()) {
+			s.logSecurityEvent(ctx, userID, "login_attempt", ipAddress, userAgent, false, "account_locked")
+			return nil, errors.New("account temporarily locked due to multiple failed login attempts")
+		}
+	}
+
+	// Get user from Firestore
+	user, err := s.getUserByID(ctx, userID)
+	if err != nil {
+		s.logSecurityEvent(ctx, userID, "login_attempt", ipAddress, userAgent, false, "user_not_found")
+		return nil, errors.New("invalid credentials")
+	}
+
+	// Create custom token for session management
+	customToken, err := firebase.AuthClient.CustomToken(ctx, userID)
+	if err != nil {
+		s.logSecurityEvent(ctx, userID, "login_attempt", ipAddress, userAgent, false, "token_creation_failed")
+		return nil, s.sanitizeError(err)
+	}
+
+	// Reset failed attempts on successful login
+	s.resetFailedAttempts(ctx, user.ID)
+
+	// Log successful login
+	s.logSecurityEvent(ctx, user.ID, "login", ipAddress, userAgent, true, "")
+
+	// Create session
+	session, err := s.createSession(ctx, user.ID, customToken, ipAddress, userAgent)
+	if err != nil {
+		return nil, s.sanitizeError(err)
+	}
+
+	// Get user permissions
+	permissions := models.GetRolePermissions(user.Role)
+
+	return &models.AuthResponse{
+		Token:        customToken,
+		RefreshToken: session.ID,
+		ExpiresIn:    int64(s.sessionExpiry.Seconds()),
+		User:         user,
+		Roles:        []string{user.Role},
+		Permissions:  permissions,
+	}, nil
+}
+
+// VerifyToken verifies and validates a Firebase ID token
+func (s *AuthService) VerifyToken(ctx context.Context, token string) (*auth.Token, *models.User, error) {
+	decodedToken, err := firebase.AuthClient.VerifyIDToken(ctx, token)
+	if err != nil {
+		return nil, nil, errors.New("invalid token")
+	}
+
+	// Get user from Firestore
+	user, err := s.getUserByID(ctx, decodedToken.UID)
+	if err != nil {
+		return nil, nil, errors.New("user not found")
+	}
+
+	// Check if account is active
+	if !user.IsActive {
+		return nil, nil, errors.New("account is inactive")
+	}
+
+	return decodedToken, user, nil
+}
+
+// RefreshToken refreshes an access token
+func (s *AuthService) RefreshToken(ctx context.Context, refreshToken, ipAddress, userAgent string) (*models.AuthResponse, error) {
+	// Get session
+	sessionDoc, err := firebase.DB.Collection("sessions").Doc(refreshToken).Get(ctx)
+	if err != nil {
+		return nil, errors.New("invalid refresh token")
+	}
+
+	var session models.UserSession
+	if err := sessionDoc.DataTo(&session); err != nil {
+		return nil, errors.New("invalid session")
+	}
+
+	// Check if session is expired
+	if session.ExpiresAt.Before(time.Now().UTC()) {
+		// Delete expired session
+		firebase.DB.Collection("sessions").Doc(refreshToken).Delete(ctx)
+		return nil, errors.New("session expired")
+	}
+
+	// Check if session is active
+	if !session.IsActive {
+		return nil, errors.New("session inactive")
+	}
+
+	// Get user
+	user, err := s.getUserByID(ctx, session.UserID)
+	if err != nil {
+		return nil, errors.New("user not found")
+	}
+
+	// Check if account is active
+	if !user.IsActive {
+		return nil, errors.New("account is inactive")
+	}
+
+	// Create new custom token
+	customToken, err := firebase.AuthClient.CustomToken(ctx, user.ID)
+	if err != nil {
+		return nil, s.sanitizeError(err)
+	}
+
+	// Update session
+	// FIXED: Issue #84 - Use UTC timezone consistently
+	now := time.Now().UTC()
+	session.LastActivity = now
+	session.ExpiresAt = now.Add(s.sessionExpiry)
+	firebase.DB.Collection("sessions").Doc(refreshToken).Update(ctx, []firestore.Update{
+		{Path: "last_activity", Value: session.LastActivity},
+		{Path: "expires_at", Value: session.ExpiresAt},
+	})
+
+	// Get user permissions
+	permissions := models.GetRolePermissions(user.Role)
+
+	return &models.AuthResponse{
+		Token:        customToken,
+		RefreshToken: refreshToken,
+		ExpiresIn:    int64(s.sessionExpiry.Seconds()),
+		User:         user,
+		Roles:        []string{user.Role},
+		Permissions:  permissions,
+	}, nil
+}
+
+// Logout invalidates a session
+func (s *AuthService) Logout(ctx context.Context, refreshToken, userID, ipAddress, userAgent string) error {
+	// Delete session
+	if refreshToken != "" {
+		_, err := firebase.DB.Collection("sessions").Doc(refreshToken).Delete(ctx)
+		if err != nil {
+			// Log but don't fail
+			fmt.Printf("Error deleting session: %v\n", err)
+		}
+	}
+
+	// Log logout event
+	if userID != "" {
+		s.logSecurityEvent(ctx, userID, "logout", ipAddress, userAgent, true, "")
+	}
+
+	return nil
+}
+
+// ChangePassword changes a user's password
+// FIXED: Issue #21 - Rate limiting should be handled in handler/middleware layer
+func (s *AuthService) ChangePassword(ctx context.Context, userID string, req *models.ChangePasswordRequest, ipAddress, userAgent string) error {
+	// Add timeout
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Validate new password
+	if err := s.validatePassword(req.NewPassword); err != nil {
+		return err
+	}
+
+	// Verify user exists
+	_, err := s.getUserByID(ctx, userID)
+	if err != nil {
+		return errors.New("user not found")
+	}
+
+	// Update password in Firebase Auth
+	_, err = firebase.AuthClient.UpdateUser(ctx, userID, (&auth.UserToUpdate{}).Password(req.NewPassword))
+	if err != nil {
+		s.logSecurityEvent(ctx, userID, "password_change", ipAddress, userAgent, false, "update_failed")
+		return s.sanitizeError(err)
+	}
+
+	// Log successful password change
+	s.logSecurityEvent(ctx, userID, "password_change", ipAddress, userAgent, true, "")
+
+	// FIXED: Issue #22 - Invalidate all sessions on password change
+	if err := s.invalidateAllUserSessions(ctx, userID); err != nil {
+		// Log but don't fail the password change
+		s.logSecurityEvent(ctx, userID, "password_change", ipAddress, userAgent, false, "session_invalidation_failed")
+	}
+
+	return nil
+}
+
+// invalidateAllUserSessions invalidates all sessions for a user
+func (s *AuthService) invalidateAllUserSessions(ctx context.Context, userID string) error {
+	// Get all sessions for user
+	iter := firebase.DB.Collection("sessions").
+		Where("user_id", "==", userID).
+		Where("expires_at", ">", time.Now().UTC()).
+		Documents(ctx)
+
+	batch := firebase.DB.Batch()
+	batchCount := 0
+	const maxBatchSize = 500
+
+	for {
+		doc, err := iter.Next()
+		if err != nil {
+			break
+		}
+
+		batch.Update(doc.Ref, []firestore.Update{
+			{Path: "expires_at", Value: time.Now().UTC()}, // Expire immediately
+		})
+		batchCount++
+
+		if batchCount >= maxBatchSize {
+			if _, err := batch.Commit(ctx); err != nil {
+				return err
+			}
+			batch = firebase.DB.Batch()
+			batchCount = 0
+		}
+	}
+
+	if batchCount > 0 {
+		_, err := batch.Commit(ctx)
+		return err
+	}
+
+	return nil
+}
+
+// RecordFailedLogin records a failed login attempt
+func (s *AuthService) RecordFailedLogin(ctx context.Context, email, ipAddress, userAgent string) {
+	user, err := s.getUserByEmail(ctx, email)
+	if err != nil {
+		return
+	}
+
+	lockout, _ := s.getAccountLockout(ctx, user.ID)
+	if lockout == nil {
+		lockout = &models.AccountLockout{
+			UserID:         user.ID,
+			FailedAttempts: 0,
+		}
+	}
+
+	lockout.FailedAttempts++
+	lockout.LastFailedAttempt = time.Now().UTC()
+
+	if lockout.FailedAttempts >= s.maxLoginAttempts {
+		lockout.LockedUntil = time.Now().UTC().Add(s.lockoutDuration)
+		s.logSecurityEvent(ctx, user.ID, "account_locked", ipAddress, userAgent, false, "too_many_failed_attempts")
+	}
+
+	// Save lockout
+	firebase.DB.Collection("account_lockouts").Doc(user.ID).Set(ctx, lockout)
+}
+
+// Helper methods
+
+// getUserByEmail gets user by email
+// FIXED: Issue #68 - Store emails in lowercase to avoid ToLower() on every lookup
+func (s *AuthService) getUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	// Email should already be lowercase when stored, but normalize for safety
+	email = strings.ToLower(strings.TrimSpace(email))
+	iter := firebase.DB.Collection("users").Where("email", "==", email).Limit(1).Documents(ctx)
+	doc, err := iter.Next()
+	if err != nil {
+		return nil, err
+	}
+
+	var user models.User
+	if err := doc.DataTo(&user); err != nil {
+		return nil, err
+	}
+	user.ID = doc.Ref.ID
+	return &user, nil
+}
+
+func (s *AuthService) getUserByID(ctx context.Context, userID string) (*models.User, error) {
+	doc, err := firebase.DB.Collection("users").Doc(userID).Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var user models.User
+	if err := doc.DataTo(&user); err != nil {
+		return nil, err
+	}
+	user.ID = doc.Ref.ID
+	return &user, nil
+}
+
+func (s *AuthService) getAccountLockout(ctx context.Context, userID string) (*models.AccountLockout, error) {
+	doc, err := firebase.DB.Collection("account_lockouts").Doc(userID).Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var lockout models.AccountLockout
+	if err := doc.DataTo(&lockout); err != nil {
+		return nil, err
+	}
+	return &lockout, nil
+}
+
+func (s *AuthService) resetFailedAttempts(ctx context.Context, userID string) {
+	firebase.DB.Collection("account_lockouts").Doc(userID).Delete(ctx)
+}
+
+func (s *AuthService) createSession(ctx context.Context, userID, tokenID, ipAddress, userAgent string) (*models.UserSession, error) {
+	sessionID := s.generateSessionID()
+	now := time.Now()
+
+	session := models.UserSession{
+		ID:           sessionID,
+		UserID:       userID,
+		TokenID:      tokenID,
+		IPAddress:    ipAddress,
+		UserAgent:    userAgent,
+		CreatedAt:    now,
+		ExpiresAt:    now.Add(s.sessionExpiry),
+		LastActivity: now,
+		IsActive:     true,
+	}
+
+	_, err := firebase.DB.Collection("sessions").Doc(sessionID).Set(ctx, session)
+	if err != nil {
+		return nil, err
+	}
+
+	return &session, nil
+}
+
+func (s *AuthService) generateSessionID() string {
+	b := make([]byte, 32)
+	rand.Read(b)
+	return base64.URLEncoding.EncodeToString(b)
+}
+
+func (s *AuthService) validateEmail(email string) error {
+	// FIXED: Issue #14 - Use proper email validation
+	if !utils.ValidateEmail(email) {
+		return errors.New("invalid email format")
+	}
+	return nil
+}
+
+func (s *AuthService) validatePassword(password string) error {
+	// FIXED: Issue #15 - Use proper password validation with complexity rules
+	if err := utils.ValidatePassword(password); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *AuthService) logSecurityEvent(ctx context.Context, userID, eventType, ipAddress, userAgent string, success bool, reason string) {
+	// FIXED: Issue #42 - Include request ID in logs
+	requestID := ctx.Value("request_id")
+	requestIDStr := ""
+	if requestID != nil {
+		requestIDStr = fmt.Sprintf("%v", requestID)
+	}
+
+	event := models.SecurityEvent{
+		ID:        fmt.Sprintf("%d_%s", time.Now().UnixNano(), s.generateSessionID()[:8]),
+		UserID:    userID,
+		EventType: eventType,
+		IPAddress: ipAddress,
+		UserAgent: userAgent,
+		Success:   success,
+		Reason:    reason,
+		CreatedAt: time.Now(),
+	}
+
+	// FIXED: Issue #67 - Propagate context properly
+	// Async log with timeout (FIXED: Issue #12 - Goroutine leak)
+	go func() {
+		// Use context with timeout but preserve request context values
+		logCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// Add request ID to context if available
+		if requestIDStr != "" {
+			logCtx = context.WithValue(logCtx, "request_id", requestIDStr)
+		}
+
+		_, err := firebase.DB.Collection("security_events").Doc(event.ID).Set(logCtx, event)
+		if err != nil {
+			// FIXED: Issue #42 - Include request ID in error logs
+			fmt.Printf("[RequestID: %s] Error logging security event: %v\n", requestIDStr, err)
+		}
+	}()
+}
+
+// RequestPasswordReset sends an OTP code to the user's email for password reset
+func (s *AuthService) RequestPasswordReset(ctx context.Context, email string, emailService *EmailService, twoFAService *TwoFAService, ipAddress, userAgent string) error {
+	// Add timeout
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Validate email
+	if err := s.validateEmail(email); err != nil {
+		s.logSecurityEvent(ctx, "", "password_reset_request", ipAddress, userAgent, false, "invalid_email")
+		return errors.New("invalid email format")
+	}
+
+	// Get user by email (use generic error to prevent enumeration)
+	user, err := s.getUserByEmail(ctx, email)
+	if err != nil {
+		// Don't reveal if user exists or not (prevent email enumeration)
+		s.logSecurityEvent(ctx, "", "password_reset_request", ipAddress, userAgent, false, "user_not_found")
+		// Return success message even if user doesn't exist (security best practice)
+		return nil
+	}
+
+	// Create OTP for password reset (uses Resend API via EmailService)
+	otp, err := twoFAService.CreateOTP(ctx, user.ID, email, "password_reset")
+	if err != nil {
+		s.logSecurityEvent(ctx, user.ID, "password_reset_request", ipAddress, userAgent, false, "otp_creation_failed")
+		return errors.New("failed to generate reset code")
+	}
+
+	// Send OTP email using Resend API
+	if err := emailService.SendOTPEmail(ctx, email, otp.Code, "password_reset"); err != nil {
+		s.logSecurityEvent(ctx, user.ID, "password_reset_request", ipAddress, userAgent, false, "email_send_failed")
+		return errors.New("failed to send reset code")
+	}
+
+	// Log successful request
+	s.logSecurityEvent(ctx, user.ID, "password_reset_request", ipAddress, userAgent, true, "")
+
+	return nil
+}
+
+// ConfirmPasswordReset verifies OTP and resets the password
+func (s *AuthService) ConfirmPasswordReset(ctx context.Context, email, otpCode, newPassword string, twoFAService *TwoFAService, ipAddress, userAgent string) error {
+	// Add timeout
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Validate email
+	if err := s.validateEmail(email); err != nil {
+		s.logSecurityEvent(ctx, "", "password_reset_confirm", ipAddress, userAgent, false, "invalid_email")
+		return errors.New("invalid email format")
+	}
+
+	// Validate new password
+	if err := s.validatePassword(newPassword); err != nil {
+		s.logSecurityEvent(ctx, "", "password_reset_confirm", ipAddress, userAgent, false, "invalid_password")
+		return err
+	}
+
+	// Get user by email
+	user, err := s.getUserByEmail(ctx, email)
+	if err != nil {
+		s.logSecurityEvent(ctx, "", "password_reset_confirm", ipAddress, userAgent, false, "user_not_found")
+		return errors.New("invalid reset code")
+	}
+
+	// Verify OTP using email (OTP was sent via Resend API)
+	verified, err := twoFAService.VerifyOTP(ctx, email, otpCode, "password_reset")
+	if err != nil || !verified {
+		s.logSecurityEvent(ctx, user.ID, "password_reset_confirm", ipAddress, userAgent, false, "invalid_otp")
+		return errors.New("invalid or expired reset code")
+	}
+
+	// Update password in Firebase Auth
+	_, err = firebase.AuthClient.UpdateUser(ctx, user.ID, (&auth.UserToUpdate{}).Password(newPassword))
+	if err != nil {
+		s.logSecurityEvent(ctx, user.ID, "password_reset_confirm", ipAddress, userAgent, false, "password_update_failed")
+		return s.sanitizeError(err)
+	}
+
+	// Invalidate all sessions on password reset
+	if err := s.invalidateAllUserSessions(ctx, user.ID); err != nil {
+		// Log but don't fail the password reset
+		s.logSecurityEvent(ctx, user.ID, "password_reset_confirm", ipAddress, userAgent, false, "session_invalidation_failed")
+	}
+
+	// Log successful password reset
+	s.logSecurityEvent(ctx, user.ID, "password_reset_confirm", ipAddress, userAgent, true, "")
+
+	return nil
+}
+
+func (s *AuthService) sanitizeError(err error) error {
+	// Don't expose internal errors to clients
+	errStr := err.Error()
+	if strings.Contains(errStr, "EMAIL_EXISTS") {
+		return errors.New("email already registered")
+	}
+	if strings.Contains(errStr, "INVALID_EMAIL") {
+		return errors.New("invalid email format")
+	}
+	if strings.Contains(errStr, "WEAK_PASSWORD") {
+		return errors.New("password is too weak")
+	}
+	if strings.Contains(errStr, "USER_NOT_FOUND") {
+		return errors.New("user not found")
+	}
+	// Generic error for security
+	return errors.New("authentication failed")
+}

@@ -1,0 +1,482 @@
+package services
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"time"
+
+	"tech-bant-community/server/constants"
+	"tech-bant-community/server/firebase"
+	"tech-bant-community/server/models"
+	"tech-bant-community/server/utils"
+
+	"cloud.google.com/go/firestore"
+)
+
+type PostService struct{}
+
+func NewPostService() *PostService {
+	return &PostService{}
+}
+
+// CreatePost creates a new post
+// FIXED: Issue #48 - Duplicate post prevention using content hash
+func (s *PostService) CreatePost(ctx context.Context, userID string, req *models.CreatePostRequest) (*models.Post, error) {
+	// FIXED: Issue #48 - Check for duplicate posts using content hash
+	contentHash := s.hashPostContent(userID, req.Title, req.Content)
+	duplicateQuery := firebase.DB.Collection("posts").
+		Where("author_id", "==", userID).
+		Where("content_hash", "==", contentHash).
+		Limit(1)
+
+	duplicateIter := duplicateQuery.Documents(ctx)
+	duplicateDoc, err := duplicateIter.Next()
+	if err == nil && duplicateDoc != nil && duplicateDoc.Exists() {
+		return nil, fmt.Errorf("duplicate post detected")
+	}
+
+	// Get user to populate author info
+	userService := NewUserService()
+	user, err := userService.GetUser(ctx, userID)
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to get user")
+	}
+
+	// FIXED: Issue #84 - Use UTC timezone consistently
+	now := time.Now().UTC()
+	post := models.Post{
+		Title:       req.Title,
+		Content:     req.Content,
+		AuthorID:    userID,
+		Category:    req.Category,
+		Tags:        req.Tags,
+		Likes:       0,
+		Comments:    0,
+		Views:       0,
+		Shares:      0,
+		IsPinned:    false,
+		IsHot:       false,
+		Location:    req.Location,
+		PublishedAt: now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	// Store content hash for duplicate detection
+	postMap := map[string]interface{}{
+		"title":        post.Title,
+		"content":      post.Content,
+		"author_id":    post.AuthorID,
+		"category":     post.Category,
+		"tags":         post.Tags,
+		"likes":        post.Likes,
+		"comments":     post.Comments,
+		"views":        post.Views,
+		"shares":       post.Shares,
+		"is_pinned":    post.IsPinned,
+		"is_hot":       post.IsHot,
+		"location":     post.Location,
+		"published_at": post.PublishedAt,
+		"created_at":   post.CreatedAt,
+		"updated_at":   post.UpdatedAt,
+		"content_hash": contentHash,
+	}
+
+	// Get media attachments if provided
+	// FIXED: Issue #47 - Validate media IDs before lookup
+	if len(req.MediaIDs) > 0 {
+		post.Media = make([]models.MediaAttachment, 0, len(req.MediaIDs))
+		for _, mediaID := range req.MediaIDs {
+			// Validate media ID format
+			if !utils.ValidatePostID(mediaID) { // Reuse post ID validation for media IDs
+				continue
+			}
+			mediaDoc, err := firebase.DB.Collection("media").Doc(mediaID).Get(ctx)
+			if err == nil {
+				var media models.MediaAttachment
+				if err := mediaDoc.DataTo(&media); err == nil {
+					media.ID = mediaDoc.Ref.ID
+					post.Media = append(post.Media, media)
+				}
+			}
+		}
+	}
+
+	// Create post in Firestore with transaction (FIXED: Atomic post creation and count increment)
+	postRef := firebase.DB.Collection("posts").NewDoc()
+	post.ID = postRef.ID
+	userRef := firebase.DB.Collection("users").Doc(userID)
+
+	err = firebase.DB.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		// Create post with content hash
+		if err := tx.Set(postRef, postMap); err != nil {
+			return utils.WrapError(err, "failed to create post")
+		}
+		// Increment user's posts count atomically
+		if err := tx.Update(userRef, []firestore.Update{
+			{Path: "posts_count", Value: firestore.Increment(1)},
+		}); err != nil {
+			return utils.WrapError(err, "failed to increment posts count")
+		}
+		// FIXED: Issue #36 - Increment posts counter
+		counterRef := firebase.DB.Collection("counters").Doc("posts")
+		return tx.Set(counterRef, map[string]interface{}{
+			"count":      firestore.Increment(1),
+			"updated_at": time.Now(),
+		}, firestore.MergeAll)
+	})
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to create post in transaction")
+	}
+
+	// Update post object with ID for return
+	post.ID = postRef.ID
+
+	// Populate author
+	post.Author = user
+
+	return &post, nil
+}
+
+// hashPostContent generates a hash for duplicate detection
+func (s *PostService) hashPostContent(userID, title, content string) string {
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("%s:%s:%s", userID, title, content)))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// GetPost gets a post by ID
+func (s *PostService) GetPost(ctx context.Context, postID string) (*models.Post, error) {
+	postDoc, err := firebase.DB.Collection("posts").Doc(postID).Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var post models.Post
+	if err := postDoc.DataTo(&post); err != nil {
+		return nil, err
+	}
+	post.ID = postDoc.Ref.ID
+
+	// Get author
+	userService := NewUserService()
+	author, err := userService.GetUser(ctx, post.AuthorID)
+	if err == nil {
+		post.Author = author
+	}
+
+	// Increment views atomically (FIXED: Uses transaction to prevent race conditions)
+	// FIXED: Issue #28 - Proper error handling
+	postRef := firebase.DB.Collection("posts").Doc(postID)
+	err = firebase.DB.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		return tx.Update(postRef, []firestore.Update{
+			{Path: "views", Value: firestore.Increment(1)},
+		})
+	})
+	if err != nil {
+		// Log error but don't fail the request
+		fmt.Printf("Warning: Failed to increment view count: %v\n", err)
+	} else {
+		post.Views++
+	}
+
+	return &post, nil
+}
+
+// GetPosts gets all posts with pagination
+// FIXED: Issue #37 - Batch fetch authors to avoid N+1 queries
+func (s *PostService) GetPosts(ctx context.Context, limit, offset int) ([]*models.Post, error) {
+	postsRef := firebase.DB.Collection("posts")
+	query := postsRef.OrderBy("created_at", firestore.Desc).
+		Limit(limit).
+		Offset(offset)
+
+	iter := query.Documents(ctx)
+	var posts []*models.Post
+	var authorIDs []string
+	authorIDMap := make(map[string]bool)
+
+	// Collect all author IDs first
+	for {
+		doc, err := iter.Next()
+		// FIXED: Issue #65 - Proper iterator error handling
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			return nil, utils.WrapError(err, "failed to get posts")
+		}
+		if doc == nil {
+			break
+		}
+		var post models.Post
+		if err := doc.DataTo(&post); err != nil {
+			continue
+		}
+		post.ID = doc.Ref.ID
+		posts = append(posts, &post)
+
+		// Collect unique author IDs
+		if !authorIDMap[post.AuthorID] {
+			authorIDMap[post.AuthorID] = true
+			authorIDs = append(authorIDs, post.AuthorID)
+		}
+	}
+
+	// Batch fetch all authors
+	userService := NewUserService()
+	authors := make(map[string]*models.User)
+	for _, authorID := range authorIDs {
+		author, err := userService.GetUser(ctx, authorID)
+		if err == nil {
+			authors[authorID] = author
+		}
+	}
+
+	// Populate authors
+	for _, post := range posts {
+		if author, ok := authors[post.AuthorID]; ok {
+			post.Author = author
+		}
+	}
+
+	return posts, nil
+}
+
+// GetPostsByCategory gets posts filtered by category
+// FIXED: Issue #37 - Batch fetch authors to avoid N+1 queries
+func (s *PostService) GetPostsByCategory(ctx context.Context, category string, limit, offset int) ([]*models.Post, error) {
+	postsRef := firebase.DB.Collection("posts")
+	query := postsRef.Where("category", "==", category).
+		OrderBy("created_at", firestore.Desc).
+		Limit(limit).
+		Offset(offset)
+
+	iter := query.Documents(ctx)
+	var posts []*models.Post
+	var authorIDs []string
+	authorIDMap := make(map[string]bool)
+
+	// Collect all author IDs first
+	for {
+		doc, err := iter.Next()
+		// FIXED: Issue #65 - Proper iterator error handling
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			return nil, utils.WrapError(err, "failed to get posts by category")
+		}
+		if doc == nil {
+			break
+		}
+		var post models.Post
+		if err := doc.DataTo(&post); err != nil {
+			continue
+		}
+		post.ID = doc.Ref.ID
+		posts = append(posts, &post)
+
+		// Collect unique author IDs
+		if !authorIDMap[post.AuthorID] {
+			authorIDMap[post.AuthorID] = true
+			authorIDs = append(authorIDs, post.AuthorID)
+		}
+	}
+
+	// Batch fetch all authors
+	userService := NewUserService()
+	authors := make(map[string]*models.User)
+	for _, authorID := range authorIDs {
+		author, err := userService.GetUser(ctx, authorID)
+		if err == nil {
+			authors[authorID] = author
+		}
+	}
+
+	// Populate authors
+	for _, post := range posts {
+		if author, ok := authors[post.AuthorID]; ok {
+			post.Author = author
+		}
+	}
+
+	return posts, nil
+}
+
+// LikePost toggles like on a post (FIXED: Uses transaction to prevent race conditions)
+func (s *PostService) LikePost(ctx context.Context, userID, postID string) error {
+	// Add timeout to context
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	likeRef := firebase.DB.Collection("likes").Doc(userID + "_" + postID)
+	postRef := firebase.DB.Collection("posts").Doc(postID)
+
+	// Use transaction to ensure atomicity
+	err := firebase.DB.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		likeDoc, err := tx.Get(likeRef)
+		if err != nil && err.Error() != "rpc error: code = NotFound desc = Document not found" {
+			return err
+		}
+
+		docExists := err == nil && likeDoc.Exists()
+
+		if docExists {
+			// Unlike - delete like and decrement count
+			if err := tx.Delete(likeRef); err != nil {
+				return err
+			}
+			return tx.Update(postRef, []firestore.Update{
+				{Path: "likes", Value: firestore.Increment(-1)},
+			})
+		} else {
+			// Like - create like and increment count
+			like := models.Like{
+				ID:        likeRef.ID,
+				UserID:    userID,
+				PostID:    postID,
+				CreatedAt: time.Now(),
+			}
+			if err := tx.Set(likeRef, like); err != nil {
+				return err
+			}
+			return tx.Update(postRef, []firestore.Update{
+				{Path: "likes", Value: firestore.Increment(1)},
+			})
+		}
+	})
+
+	return err
+}
+
+// BookmarkPost toggles bookmark on a post
+func (s *PostService) BookmarkPost(ctx context.Context, userID, postID string) error {
+	bookmarkRef := firebase.DB.Collection("bookmarks").Doc(userID + "_" + postID)
+	bookmarkDoc, err := bookmarkRef.Get(ctx)
+
+	bookmarkExists := err == nil && bookmarkDoc.Exists()
+
+	if bookmarkExists {
+		// Remove bookmark
+		_, err = bookmarkRef.Delete(ctx)
+	} else {
+		// Add bookmark
+		bookmark := models.Bookmark{
+			ID:        bookmarkRef.ID,
+			UserID:    userID,
+			PostID:    postID,
+			CreatedAt: time.Now(),
+		}
+		_, err = bookmarkRef.Set(ctx, bookmark)
+	}
+
+	return err
+}
+
+// UpdatePost updates an existing post
+func (s *PostService) UpdatePost(ctx context.Context, userID, postID string, req *models.UpdatePostRequest) (*models.Post, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Get post to verify ownership
+	post, err := s.GetPost(ctx, postID)
+	if err != nil {
+		return nil, utils.WrapError(err, "post not found")
+	}
+
+	// Verify ownership
+	if post.AuthorID != userID {
+		return nil, fmt.Errorf("unauthorized: you can only update your own posts")
+	}
+
+	// Build update map
+	updates := []firestore.Update{}
+
+	if req.Title != "" {
+		title, err := utils.SanitizeAndValidatePostTitle(req.Title)
+		if err != nil {
+			return nil, utils.WrapError(err, "invalid title")
+		}
+		updates = append(updates, firestore.Update{Path: "title", Value: title})
+	}
+
+	if req.Content != "" {
+		content, err := utils.SanitizeAndValidatePostContent(req.Content)
+		if err != nil {
+			return nil, utils.WrapError(err, "invalid content")
+		}
+		updates = append(updates, firestore.Update{Path: "content", Value: content})
+		contentHash := s.hashPostContent(userID, req.Title, content)
+		updates = append(updates, firestore.Update{Path: "content_hash", Value: contentHash})
+	}
+
+	if req.Category != "" {
+		if !utils.ValidateCategory(req.Category) {
+			return nil, fmt.Errorf("invalid category")
+		}
+		updates = append(updates, firestore.Update{Path: "category", Value: req.Category})
+	}
+
+	if req.Tags != nil {
+		if len(req.Tags) > constants.MaxTagsPerPost {
+			return nil, fmt.Errorf("maximum %d tags allowed", constants.MaxTagsPerPost)
+		}
+		tags, err := utils.SanitizeTags(req.Tags, constants.MaxTagsPerPost)
+		if err != nil {
+			return nil, utils.WrapError(err, "invalid tags")
+		}
+		updates = append(updates, firestore.Update{Path: "tags", Value: tags})
+	}
+
+	if req.Location != "" {
+		updates = append(updates, firestore.Update{Path: "location", Value: req.Location})
+	}
+
+	if req.MediaIDs != nil {
+		if len(req.MediaIDs) > constants.MaxMediaPerPost {
+			return nil, fmt.Errorf("maximum %d media files allowed", constants.MaxMediaPerPost)
+		}
+		updates = append(updates, firestore.Update{Path: "media_ids", Value: req.MediaIDs})
+	}
+
+	// Always update updated_at
+	updates = append(updates, firestore.Update{Path: "updated_at", Value: time.Now().UTC()})
+
+	// Update post
+	postRef := firebase.DB.Collection("posts").Doc(postID)
+	_, err = postRef.Update(ctx, updates)
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to update post")
+	}
+
+	return s.GetPost(ctx, postID)
+}
+
+// DeletePost deletes a post
+func (s *PostService) DeletePost(ctx context.Context, userID, postID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Get post to verify ownership
+	post, err := s.GetPost(ctx, postID)
+	if err != nil {
+		return utils.WrapError(err, "post not found")
+	}
+
+	// Verify ownership
+	if post.AuthorID != userID {
+		return fmt.Errorf("unauthorized: you can only delete your own posts")
+	}
+
+	// Delete post
+	postRef := firebase.DB.Collection("posts").Doc(postID)
+	_, err = postRef.Delete(ctx)
+	if err != nil {
+		return utils.WrapError(err, "failed to delete post")
+	}
+
+	return nil
+}

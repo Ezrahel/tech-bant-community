@@ -1,49 +1,16 @@
-# Simple Makefile for a Go project
+.PHONY: tidy build run test clean
 
-# Build the application
-all: build test
+tidy:
+	go mod tidy
 
 build:
-	@echo "Building..."
-	
-	
-	@go build -o main.exe cmd/api/main.go
+	go build -o bin/server ./main.go
 
-# Run the application
 run:
-	@go run cmd/api/main.go
-# Create DB container
-docker-run:
-	@docker compose up --build
+	go run ./main.go
 
-# Shutdown DB container
-docker-down:
-	@docker compose down
-
-# Test the application
 test:
-	@echo "Testing..."
-	@go test ./... -v
-# Integrations Tests for the application
-itest:
-	@echo "Running integration tests..."
-	@go test ./internal/database -v
+	go test ./...
 
-# Clean the binary
 clean:
-	@echo "Cleaning..."
-	@rm -f main
-
-# Live Reload
-watch:
-	@powershell -ExecutionPolicy Bypass -Command "if (Get-Command air -ErrorAction SilentlyContinue) { \
-		air; \
-		Write-Output 'Watching...'; \
-	} else { \
-		Write-Output 'Installing air...'; \
-		go install github.com/air-verse/air@latest; \
-		air; \
-		Write-Output 'Watching...'; \
-	}"
-
-.PHONY: all build run test clean watch docker-run docker-down itest
+	rm -rf bin/

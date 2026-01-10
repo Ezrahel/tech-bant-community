@@ -1,0 +1,104 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"time"
+
+	"tech-bant-community/server/firebase"
+	"tech-bant-community/server/models"
+
+	"cloud.google.com/go/storage"
+)
+
+type MediaService struct{}
+
+func NewMediaService() *MediaService {
+	return &MediaService{}
+}
+
+// UploadMedia uploads a file to Firebase Storage and creates a media record
+// FIXED: Issue #51 - Cleanup on failure, Issue #64 - Validate actual content type
+func (s *MediaService) UploadMedia(ctx context.Context, file io.Reader, filename string, size int64, detectedMIME string) (*models.MediaAttachment, error) {
+	// FIXED: Issue #64 - Use detected MIME type from handler instead of extension
+	mimeType := detectedMIME
+	var mediaType string
+	if len(mimeType) >= 5 {
+		if mimeType[:5] == "image" {
+			mediaType = "image"
+		} else if mimeType[:5] == "video" {
+			mediaType = "video"
+		} else {
+			mediaType = "image" // default
+		}
+	} else {
+		mediaType = "image" // default
+	}
+
+	// Generate unique filename
+	mediaID := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filename)
+	objectPath := fmt.Sprintf("media/%s", mediaID)
+
+	// Upload to Firebase Storage
+	bucket := firebase.StorageClient.Bucket(firebase.StorageBucket)
+	obj := bucket.Object(objectPath)
+	writer := obj.NewWriter(ctx)
+	writer.ContentType = mimeType
+
+	uploaded := false
+	if _, err := io.Copy(writer, file); err != nil {
+		writer.Close()
+		// FIXED: Issue #51 - Cleanup partial upload
+		obj.Delete(ctx)
+		return nil, err
+	}
+
+	if err := writer.Close(); err != nil {
+		// FIXED: Issue #51 - Cleanup on failure
+		obj.Delete(ctx)
+		return nil, err
+	}
+	uploaded = true
+
+	// Make file publicly readable
+	if err := obj.ACL().Set(ctx, storage.AllUsers, storage.RoleReader); err != nil {
+		// FIXED: Issue #51 - Cleanup on failure
+		if uploaded {
+			obj.Delete(ctx)
+		}
+		return nil, err
+	}
+
+	// Get public URL
+	attrs, err := obj.Attrs(ctx)
+	if err != nil {
+		// FIXED: Issue #51 - Cleanup on failure
+		if uploaded {
+			obj.Delete(ctx)
+		}
+		return nil, err
+	}
+
+	url := fmt.Sprintf("https://storage.googleapis.com/%s/%s", attrs.Bucket, attrs.Name)
+
+	// Create media record in Firestore
+	media := models.MediaAttachment{
+		ID:   mediaID,
+		Type: mediaType,
+		URL:  url,
+		Name: filename,
+		Size: size,
+	}
+
+	_, err = firebase.DB.Collection("media").Doc(mediaID).Set(ctx, media)
+	if err != nil {
+		// FIXED: Issue #51 - Cleanup on Firestore failure
+		if uploaded {
+			obj.Delete(ctx)
+		}
+		return nil, err
+	}
+
+	return &media, nil
+}

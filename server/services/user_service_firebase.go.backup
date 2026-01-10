@@ -1,0 +1,204 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"tech-bant-community/server/firebase"
+	"tech-bant-community/server/models"
+	"tech-bant-community/server/utils"
+
+	"cloud.google.com/go/firestore"
+)
+
+type UserService struct{}
+
+func NewUserService() *UserService {
+	return &UserService{}
+}
+
+// GetOrCreateUser gets or creates a user profile in Firestore
+func (s *UserService) GetOrCreateUser(ctx context.Context, userID, email, name string) (*models.User, error) {
+	userRef := firebase.DB.Collection("users").Doc(userID)
+	userDoc, err := userRef.Get(ctx)
+
+	if err == nil && userDoc.Exists() {
+		var user models.User
+		if err := userDoc.DataTo(&user); err != nil {
+			return nil, err
+		}
+		user.ID = userDoc.Ref.ID
+		return &user, nil
+	}
+
+	// Create new user
+	now := time.Now()
+	user := models.User{
+		ID:             userID,
+		Name:           name,
+		Email:          email,
+		Avatar:         "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop",
+		Bio:            "",
+		Location:       "",
+		Website:        "",
+		IsAdmin:        false,
+		IsVerified:     false,
+		IsActive:       true,
+		Role:           "user",
+		Provider:       "email",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		PostsCount:     0,
+		FollowersCount: 0,
+		FollowingCount: 0,
+	}
+
+	_, err = userRef.Set(ctx, user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+// GetUser gets a user by ID
+func (s *UserService) GetUser(ctx context.Context, userID string) (*models.User, error) {
+	userDoc, err := firebase.DB.Collection("users").Doc(userID).Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var user models.User
+	if err := userDoc.DataTo(&user); err != nil {
+		return nil, err
+	}
+	user.ID = userDoc.Ref.ID
+
+	// Get posts count by iterating
+	postsIter := firebase.DB.Collection("posts").Where("author_id", "==", userID).Documents(ctx)
+	postsCount := 0
+	for {
+		_, err := postsIter.Next()
+		if err != nil {
+			break
+		}
+		postsCount++
+	}
+	user.PostsCount = postsCount
+
+	return &user, nil
+}
+
+// UpdateUser updates user profile
+// FIXED: Issue #66 - Validate profile fields
+func (s *UserService) UpdateUser(ctx context.Context, userID string, req *models.UpdateProfileRequest) (*models.User, error) {
+	userRef := firebase.DB.Collection("users").Doc(userID)
+
+	updates := []firestore.Update{
+		{Path: "updated_at", Value: time.Now()},
+	}
+
+	// FIXED: Issue #66 - Validate and sanitize fields
+	if req.Name != "" {
+		name := utils.SanitizeString(req.Name)
+		if !utils.ValidateLength(name, 1, 100) {
+			return nil, fmt.Errorf("name must be between 1 and 100 characters")
+		}
+		updates = append(updates, firestore.Update{Path: "name", Value: name})
+	}
+	if req.Bio != "" {
+		bio := utils.SanitizeString(req.Bio)
+		if !utils.ValidateLength(bio, 0, 500) {
+			return nil, fmt.Errorf("bio must be less than 500 characters")
+		}
+		updates = append(updates, firestore.Update{Path: "bio", Value: bio})
+	}
+	if req.Location != "" {
+		location := utils.SanitizeString(req.Location)
+		if !utils.ValidateLength(location, 0, 100) {
+			return nil, fmt.Errorf("location must be less than 100 characters")
+		}
+		updates = append(updates, firestore.Update{Path: "location", Value: location})
+	}
+	if req.Website != "" {
+		if !utils.ValidateURL(req.Website) {
+			return nil, fmt.Errorf("invalid website URL")
+		}
+		updates = append(updates, firestore.Update{Path: "website", Value: req.Website})
+	}
+	if req.Avatar != "" {
+		if !utils.ValidateURL(req.Avatar) {
+			return nil, fmt.Errorf("invalid avatar URL")
+		}
+		updates = append(updates, firestore.Update{Path: "avatar", Value: req.Avatar})
+	}
+
+	_, err := userRef.Update(ctx, updates)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.GetUser(ctx, userID)
+}
+
+// SearchUsers searches users by name
+func (s *UserService) SearchUsers(ctx context.Context, query string, limit int) ([]*models.User, error) {
+	usersRef := firebase.DB.Collection("users")
+
+	// Firestore doesn't support full-text search, so we'll do a prefix search
+	// In production, consider using Algolia or similar
+	iter := usersRef.Where("name", ">=", query).
+		Where("name", "<=", query+"\uf8ff").
+		Limit(limit).
+		Documents(ctx)
+
+	var users []*models.User
+	for {
+		doc, err := iter.Next()
+		// FIXED: Issue #65 - Proper iterator error handling
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			return nil, utils.WrapError(err, "failed to search users")
+		}
+		if doc == nil {
+			break
+		}
+		var user models.User
+		if err := doc.DataTo(&user); err != nil {
+			continue
+		}
+		user.ID = doc.Ref.ID
+		users = append(users, &user)
+	}
+
+	return users, nil
+}
+
+// GetUserPosts gets posts by a user
+func (s *UserService) GetUserPosts(ctx context.Context, userID string, limit, offset int) ([]*models.Post, error) {
+	postsRef := firebase.DB.Collection("posts")
+	query := postsRef.Where("author_id", "==", userID).
+		OrderBy("created_at", firestore.Desc).
+		Limit(limit).
+		Offset(offset)
+
+	iter := query.Documents(ctx)
+	var posts []*models.Post
+	for {
+		doc, err := iter.Next()
+		if err != nil {
+			break
+		}
+		var post models.Post
+		if err := doc.DataTo(&post); err != nil {
+			continue
+		}
+		post.ID = doc.Ref.ID
+		posts = append(posts, &post)
+	}
+
+	return posts, nil
+}

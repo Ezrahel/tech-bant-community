@@ -1,0 +1,282 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"tech-bant-community/server/firebase"
+	"tech-bant-community/server/models"
+	"tech-bant-community/server/utils"
+
+	"cloud.google.com/go/firestore"
+)
+
+type CommentService struct{}
+
+func NewCommentService() *CommentService {
+	return &CommentService{}
+}
+
+// CreateComment creates a comment on a post
+// FIXED: Issue #63 - Use transaction for atomic comment creation and count increment
+// FIXED: Issue #62 - Validate and sanitize comment content
+func (s *CommentService) CreateComment(ctx context.Context, userID, postID string, req *models.CreateCommentRequest) (*models.Comment, error) {
+	// Add timeout
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// FIXED: Issue #62 - Validate and sanitize comment content
+	content, err := utils.SanitizeAndValidatePostContent(req.Content) // Reuse post content validation
+	if err != nil {
+		return nil, utils.WrapError(err, "invalid comment content")
+	}
+
+	// Get user
+	userService := NewUserService()
+	user, err := userService.GetUser(ctx, userID)
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to get user")
+	}
+
+	now := time.Now()
+	comment := models.Comment{
+		PostID:    postID,
+		AuthorID:  userID,
+		Content:   content,
+		Likes:     0,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+
+	// Create comment and increment count atomically
+	commentRef := firebase.DB.Collection("comments").NewDoc()
+	comment.ID = commentRef.ID
+	postRef := firebase.DB.Collection("posts").Doc(postID)
+
+	err = firebase.DB.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
+		// Create comment
+		if err := tx.Set(commentRef, comment); err != nil {
+			return utils.WrapError(err, "failed to create comment")
+		}
+		// Increment post comments count atomically
+		if err := tx.Update(postRef, []firestore.Update{
+			{Path: "comments", Value: firestore.Increment(1)},
+		}); err != nil {
+			return utils.WrapError(err, "failed to increment comments count")
+		}
+		// FIXED: Issue #36 - Increment comments counter
+		counterRef := firebase.DB.Collection("counters").Doc("comments")
+		return tx.Set(counterRef, map[string]interface{}{
+			"count":      firestore.Increment(1),
+			"updated_at": time.Now(),
+		}, firestore.MergeAll)
+	})
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to create comment in transaction")
+	}
+
+	// Populate author
+	comment.Author = user
+
+	return &comment, nil
+}
+
+// GetComments gets comments for a post
+func (s *CommentService) GetComments(ctx context.Context, postID string, limit, offset int) ([]*models.Comment, error) {
+	commentsRef := firebase.DB.Collection("comments")
+	query := commentsRef.Where("post_id", "==", postID).
+		OrderBy("created_at", firestore.Desc).
+		Limit(limit).
+		Offset(offset)
+
+	iter := query.Documents(ctx)
+	var comments []*models.Comment
+	var authorIDs []string
+	authorIDMap := make(map[string]bool)
+
+	// Collect all author IDs first (FIXED: Issue #37 - Batch fetch)
+	for {
+		doc, err := iter.Next()
+		// FIXED: Issue #65 - Proper iterator error handling
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			return nil, utils.WrapError(err, "failed to get comments")
+		}
+		if doc == nil {
+			break
+		}
+		var comment models.Comment
+		if err := doc.DataTo(&comment); err != nil {
+			continue
+		}
+		comment.ID = doc.Ref.ID
+		comments = append(comments, &comment)
+
+		// Collect unique author IDs
+		if !authorIDMap[comment.AuthorID] {
+			authorIDMap[comment.AuthorID] = true
+			authorIDs = append(authorIDs, comment.AuthorID)
+		}
+	}
+
+	// Batch fetch all authors
+	userService := NewUserService()
+	authors := make(map[string]*models.User)
+	for _, authorID := range authorIDs {
+		author, err := userService.GetUser(ctx, authorID)
+		if err == nil {
+			authors[authorID] = author
+		}
+	}
+
+	// Populate authors
+	for _, comment := range comments {
+		if author, ok := authors[comment.AuthorID]; ok {
+			comment.Author = author
+		}
+	}
+
+	return comments, nil
+}
+
+// LikeComment toggles like on a comment
+func (s *CommentService) LikeComment(ctx context.Context, userID, commentID string) error {
+	likeRef := firebase.DB.Collection("likes").Doc(userID + "_comment_" + commentID)
+	likeDoc, err := likeRef.Get(ctx)
+
+	commentRef := firebase.DB.Collection("comments").Doc(commentID)
+
+	likeExists := err == nil && likeDoc.Exists()
+
+	if likeExists {
+		// Unlike
+		_, err = likeRef.Delete(ctx)
+		if err != nil {
+			return err
+		}
+		_, err = commentRef.Update(ctx, []firestore.Update{
+			{Path: "likes", Value: firestore.Increment(-1)},
+		})
+	} else {
+		// Like
+		like := models.Like{
+			ID:        likeRef.ID,
+			UserID:    userID,
+			CommentID: commentID,
+			CreatedAt: time.Now(),
+		}
+		_, err = likeRef.Set(ctx, like)
+		if err != nil {
+			return err
+		}
+		_, err = commentRef.Update(ctx, []firestore.Update{
+			{Path: "likes", Value: firestore.Increment(1)},
+		})
+	}
+
+	return err
+}
+
+// UpdateComment updates an existing comment
+func (s *CommentService) UpdateComment(ctx context.Context, userID, commentID string, req *models.UpdateCommentRequest) (*models.Comment, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Get comment to verify ownership
+	commentRef := firebase.DB.Collection("comments").Doc(commentID)
+	commentDoc, err := commentRef.Get(ctx)
+	if err != nil {
+		return nil, utils.WrapError(err, "comment not found")
+	}
+
+	var comment models.Comment
+	if err := commentDoc.DataTo(&comment); err != nil {
+		return nil, utils.WrapError(err, "failed to parse comment")
+	}
+	comment.ID = commentDoc.Ref.ID
+
+	// Verify ownership
+	if comment.AuthorID != userID {
+		return nil, fmt.Errorf("unauthorized: you can only update your own comments")
+	}
+
+	// Sanitize and validate content
+	content, err := utils.SanitizeAndValidatePostContent(req.Content)
+	if err != nil {
+		return nil, utils.WrapError(err, "invalid comment content")
+	}
+
+	// Update comment
+	_, err = commentRef.Update(ctx, []firestore.Update{
+		{Path: "content", Value: content},
+		{Path: "updated_at", Value: time.Now().UTC()},
+	})
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to update comment")
+	}
+
+	// Get updated comment
+	updatedDoc, err := commentRef.Get(ctx)
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to get updated comment")
+	}
+
+	var updatedComment models.Comment
+	if err := updatedDoc.DataTo(&updatedComment); err != nil {
+		return nil, utils.WrapError(err, "failed to parse updated comment")
+	}
+	updatedComment.ID = updatedDoc.Ref.ID
+
+	// Get author
+	userService := NewUserService()
+	author, err := userService.GetUser(ctx, updatedComment.AuthorID)
+	if err == nil {
+		updatedComment.Author = author
+	}
+
+	return &updatedComment, nil
+}
+
+// DeleteComment deletes a comment
+func (s *CommentService) DeleteComment(ctx context.Context, userID, commentID string) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// Get comment to verify ownership
+	commentRef := firebase.DB.Collection("comments").Doc(commentID)
+	commentDoc, err := commentRef.Get(ctx)
+	if err != nil {
+		return utils.WrapError(err, "comment not found")
+	}
+
+	var comment models.Comment
+	if err := commentDoc.DataTo(&comment); err != nil {
+		return utils.WrapError(err, "failed to parse comment")
+	}
+
+	// Verify ownership
+	if comment.AuthorID != userID {
+		return fmt.Errorf("unauthorized: you can only delete your own comments")
+	}
+
+	// Delete comment
+	_, err = commentRef.Delete(ctx)
+	if err != nil {
+		return utils.WrapError(err, "failed to delete comment")
+	}
+
+	// Decrement post comment count
+	postRef := firebase.DB.Collection("posts").Doc(comment.PostID)
+	_, err = postRef.Update(ctx, []firestore.Update{
+		{Path: "comments", Value: firestore.Increment(-1)},
+	})
+	if err != nil {
+		// Log but don't fail
+		fmt.Printf("Warning: Failed to decrement comment count: %v\n", err)
+	}
+
+	return nil
+}

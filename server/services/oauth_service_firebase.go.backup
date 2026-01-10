@@ -1,0 +1,323 @@
+package services
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"tech-bant-community/server/config"
+	"tech-bant-community/server/firebase"
+	"tech-bant-community/server/models"
+
+	"cloud.google.com/go/firestore"
+	"firebase.google.com/go/v4/auth"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
+)
+
+type OAuthService struct {
+	cfg         *config.Config
+	googleOAuth *oauth2.Config
+}
+
+func NewOAuthService(cfg *config.Config) *OAuthService {
+	googleOAuth := &oauth2.Config{
+		ClientID:     cfg.GoogleClientID,
+		ClientSecret: cfg.GoogleClientSecret,
+		RedirectURL:  cfg.OAuthRedirectURL,
+		Scopes: []string{
+			"https://www.googleapis.com/auth/userinfo.email",
+			"https://www.googleapis.com/auth/userinfo.profile",
+		},
+		Endpoint: google.Endpoint,
+	}
+
+	return &OAuthService{
+		cfg:         cfg,
+		googleOAuth: googleOAuth,
+	}
+}
+
+// GenerateState generates a random state for OAuth
+func (s *OAuthService) GenerateState() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(b), nil
+}
+
+// StoreOAuthState stores OAuth state in Firestore
+func (s *OAuthService) StoreOAuthState(ctx context.Context, state *models.OAuthState) error {
+	stateData := map[string]interface{}{
+		"state":        state.State,
+		"provider":     string(state.Provider),
+		"redirect_url": state.RedirectURL,
+		"user_id":      state.UserID,
+		"created_at":   time.Now(),
+		"expires_at":   time.Now().Add(10 * time.Minute),
+	}
+
+	_, err := firebase.DB.Collection("oauth_states").Doc(state.State).Set(ctx, stateData)
+	return err
+}
+
+// ValidateRedirectURL validates redirect URL against whitelist (FIXED: Issue #4)
+func (s *OAuthService) ValidateRedirectURL(url string) bool {
+	allowed := s.cfg.AllowedOAuthRedirects
+	for _, allowedURL := range allowed {
+		if url == allowedURL {
+			return true
+		}
+	}
+	return false
+}
+
+// GetAllowedRedirects returns allowed redirect URLs
+func (s *OAuthService) GetAllowedRedirects() []string {
+	return s.cfg.AllowedOAuthRedirects
+}
+
+// VerifyOAuthState verifies and retrieves OAuth state (FIXED: Issue #10 - Unsafe type assertions)
+func (s *OAuthService) VerifyOAuthState(ctx context.Context, state string) (*models.OAuthState, error) {
+	// Add timeout
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	doc, err := firebase.DB.Collection("oauth_states").Doc(state).Get(ctx)
+	if err != nil {
+		return nil, errors.New("invalid state")
+	}
+
+	data := doc.Data()
+	
+	// Safe type assertion with checks
+	expiresAtValue, ok := data["expires_at"]
+	if !ok {
+		return nil, errors.New("invalid state")
+	}
+	
+	var expiresAt time.Time
+	switch v := expiresAtValue.(type) {
+	case time.Time:
+		expiresAt = v
+	case *time.Time:
+		if v != nil {
+			expiresAt = *v
+		} else {
+			return nil, errors.New("invalid state")
+		}
+	default:
+		return nil, errors.New("invalid state")
+	}
+
+	// FIXED: Issue #57 - Check expiry atomically in transaction
+	now := time.Now()
+	if expiresAt.Before(now) {
+		// Delete expired state
+		firebase.DB.Collection("oauth_states").Doc(state).Delete(ctx)
+		return nil, errors.New("state expired")
+	}
+
+	// Safe type assertions
+	stateStr, ok := data["state"].(string)
+	if !ok {
+		return nil, errors.New("invalid state")
+	}
+	
+	providerStr, ok := data["provider"].(string)
+	if !ok {
+		return nil, errors.New("invalid state")
+	}
+	
+	redirectURL, ok := data["redirect_url"].(string)
+	if !ok {
+		return nil, errors.New("invalid state")
+	}
+
+	oauthState := &models.OAuthState{
+		State:       stateStr,
+		Provider:    models.OAuthProvider(providerStr),
+		RedirectURL: redirectURL,
+	}
+
+	if userID, ok := data["user_id"].(string); ok && userID != "" {
+		oauthState.UserID = userID
+	}
+
+	// Delete state after use
+	firebase.DB.Collection("oauth_states").Doc(state).Delete(ctx)
+
+	return oauthState, nil
+}
+
+// GetGoogleAuthURL returns Google OAuth authorization URL
+func (s *OAuthService) GetGoogleAuthURL(state string) string {
+	return s.googleOAuth.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+}
+
+// ExchangeGoogleCode exchanges authorization code for token
+// FIXED: Issue #55 - Add timeout, Issue #56 - Add retry logic
+func (s *OAuthService) ExchangeGoogleCode(ctx context.Context, code string) (*oauth2.Token, error) {
+	// Add timeout
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// FIXED: Issue #56 - Retry with exponential backoff
+	var token *oauth2.Token
+	var err error
+	maxRetries := 3
+	baseDelay := 1 * time.Second
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		token, err = s.googleOAuth.Exchange(ctx, code)
+		if err == nil {
+			return token, nil
+		}
+
+		// Don't retry on non-transient errors
+		if attempt < maxRetries-1 {
+			delay := baseDelay * time.Duration(1<<uint(attempt)) // Exponential backoff
+			time.Sleep(delay)
+		}
+	}
+
+	return nil, err
+}
+
+// GetGoogleUserInfo gets user info from Google
+// FIXED: Issue #55 - Add timeout, Issue #56 - Add retry logic
+func (s *OAuthService) GetGoogleUserInfo(ctx context.Context, token *oauth2.Token) (*models.GoogleUserInfo, error) {
+	// Add timeout
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+
+	// FIXED: Issue #56 - Retry with exponential backoff
+	maxRetries := 3
+	baseDelay := 1 * time.Second
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		client := s.googleOAuth.Client(ctx, token)
+		resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+		if err == nil {
+			defer resp.Body.Close()
+
+			if resp.StatusCode == http.StatusOK {
+				body, err := io.ReadAll(resp.Body)
+				if err == nil {
+					var userInfo models.GoogleUserInfo
+					if err := json.Unmarshal(body, &userInfo); err == nil {
+						return &userInfo, nil
+					}
+				}
+			}
+
+			// Don't retry on client errors (4xx)
+			if resp.StatusCode < 500 {
+				return nil, fmt.Errorf("failed to get user info: status %d", resp.StatusCode)
+			}
+		}
+
+		// Retry on transient errors
+		if attempt < maxRetries-1 {
+			delay := baseDelay * time.Duration(1<<uint(attempt))
+			time.Sleep(delay)
+			continue
+		}
+
+		if err != nil {
+			return nil, err
+		}
+		return nil, errors.New("failed to get user info after retries")
+	}
+
+	return nil, errors.New("failed to get user info")
+}
+
+// CreateOrUpdateUserFromOAuth creates or updates user from OAuth
+func (s *OAuthService) CreateOrUpdateUserFromOAuth(ctx context.Context, provider models.OAuthProvider, userInfo *models.GoogleUserInfo) (*models.User, bool, error) {
+	// Check if user exists by email
+	iter := firebase.DB.Collection("users").Where("email", "==", userInfo.Email).Limit(1).Documents(ctx)
+	doc, err := iter.Next()
+
+	var user *models.User
+	isNewUser := false
+
+	if err != nil {
+		// User doesn't exist, create new
+		isNewUser = true
+
+		// Create user in Firebase Auth
+		userParams := (&auth.UserToCreate{}).
+			Email(userInfo.Email).
+			DisplayName(userInfo.Name).
+			PhotoURL(userInfo.Picture).
+			EmailVerified(userInfo.VerifiedEmail)
+
+		authUser, err := firebase.AuthClient.CreateUser(ctx, userParams)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to create auth user: %w", err)
+		}
+
+		// Create user profile in Firestore
+		now := time.Now()
+		user = &models.User{
+			ID:             authUser.UID,
+			Name:           userInfo.Name,
+			Email:          userInfo.Email,
+			Avatar:         userInfo.Picture,
+			IsAdmin:        false,
+			IsVerified:     userInfo.VerifiedEmail,
+			IsActive:       true,
+			Role:           models.RoleUser,
+			Provider:       string(provider),
+			CreatedAt:      now,
+			UpdatedAt:      now,
+			PostsCount:     0,
+			FollowersCount: 0,
+			FollowingCount: 0,
+		}
+
+		_, err = firebase.DB.Collection("users").Doc(authUser.UID).Set(ctx, user)
+		if err != nil {
+			firebase.AuthClient.DeleteUser(ctx, authUser.UID)
+			return nil, false, err
+		}
+	} else {
+		// User exists, update
+		var existingUser models.User
+		if err := doc.DataTo(&existingUser); err != nil {
+			return nil, false, err
+		}
+		existingUser.ID = doc.Ref.ID
+
+		// Update user info
+		existingUser.Name = userInfo.Name
+		existingUser.Avatar = userInfo.Picture
+		existingUser.UpdatedAt = time.Now()
+		if userInfo.VerifiedEmail {
+			existingUser.IsVerified = true
+		}
+
+		// Update in Firestore
+		_, err = firebase.DB.Collection("users").Doc(existingUser.ID).Update(ctx, []firestore.Update{
+			{Path: "name", Value: existingUser.Name},
+			{Path: "avatar", Value: existingUser.Avatar},
+			{Path: "updated_at", Value: existingUser.UpdatedAt},
+			{Path: "is_verified", Value: existingUser.IsVerified},
+		})
+		if err != nil {
+			return nil, false, err
+		}
+
+		user = &existingUser
+	}
+
+	return user, isNewUser, nil
+}

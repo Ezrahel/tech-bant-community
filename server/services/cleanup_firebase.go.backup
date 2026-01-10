@@ -1,0 +1,112 @@
+package services
+
+import (
+	"context"
+	"time"
+
+	"tech-bant-community/server/firebase"
+)
+
+// CleanupService handles cleanup of expired data
+// FIXED: Issues #45, #46 - Cleanup expired OTPs and sessions
+type CleanupService struct{}
+
+func NewCleanupService() *CleanupService {
+	return &CleanupService{}
+}
+
+// CleanupExpiredOTPs removes expired OTP codes
+func (s *CleanupService) CleanupExpiredOTPs(ctx context.Context) error {
+	now := time.Now()
+	expiredQuery := firebase.DB.Collection("otp_codes").
+		Where("expires_at", "<", now).
+		Limit(500) // Process in batches
+
+	iter := expiredQuery.Documents(ctx)
+	batch := firebase.DB.Batch()
+	batchCount := 0
+	const maxBatchSize = 500
+
+	for {
+		doc, err := iter.Next()
+		if err != nil {
+			break
+		}
+
+		batch.Delete(doc.Ref)
+		batchCount++
+
+		if batchCount >= maxBatchSize {
+			if _, err := batch.Commit(ctx); err != nil {
+				return err
+			}
+			batch = firebase.DB.Batch()
+			batchCount = 0
+		}
+	}
+
+	if batchCount > 0 {
+		_, err := batch.Commit(ctx)
+		return err
+	}
+
+	return nil
+}
+
+// CleanupExpiredSessions removes expired sessions
+func (s *CleanupService) CleanupExpiredSessions(ctx context.Context) error {
+	now := time.Now()
+	expiredQuery := firebase.DB.Collection("sessions").
+		Where("expires_at", "<", now).
+		Limit(500) // Process in batches
+
+	iter := expiredQuery.Documents(ctx)
+	batch := firebase.DB.Batch()
+	batchCount := 0
+	const maxBatchSize = 500
+
+	for {
+		doc, err := iter.Next()
+		if err != nil {
+			break
+		}
+
+		batch.Delete(doc.Ref)
+		batchCount++
+
+		if batchCount >= maxBatchSize {
+			if _, err := batch.Commit(ctx); err != nil {
+				return err
+			}
+			batch = firebase.DB.Batch()
+			batchCount = 0
+		}
+	}
+
+	if batchCount > 0 {
+		_, err := batch.Commit(ctx)
+		return err
+	}
+
+	return nil
+}
+
+// StartCleanupJob starts background cleanup job
+func (s *CleanupService) StartCleanupJob(ctx context.Context) {
+	ticker := time.NewTicker(1 * time.Hour) // Run every hour
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				cleanupCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				s.CleanupExpiredOTPs(cleanupCtx)
+				s.CleanupExpiredSessions(cleanupCtx)
+				cancel()
+			case <-ctx.Done():
+				ticker.Stop()
+				return
+			}
+		}
+	}()
+}
+

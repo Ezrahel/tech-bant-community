@@ -1,0 +1,311 @@
+package services
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"tech-bant-community/server/firebase"
+	"tech-bant-community/server/models"
+	"tech-bant-community/server/utils"
+
+	"cloud.google.com/go/firestore"
+	"firebase.google.com/go/v4/auth"
+)
+
+type AdminService struct{}
+
+func NewAdminService() *AdminService {
+	return &AdminService{}
+}
+
+// GetStats gets dashboard statistics
+// FIXED: Issue #36 - Use counter documents for efficient counting
+func (s *AdminService) GetStats(ctx context.Context) (*models.AdminStats, error) {
+	stats := &models.AdminStats{}
+
+	// Use counter documents for efficient counting
+	usersCount, err := utils.GetCount(ctx, "users")
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to get users count")
+	}
+	stats.TotalUsers = int(usersCount)
+
+	postsCount, err := utils.GetCount(ctx, "posts")
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to get posts count")
+	}
+	stats.TotalPosts = int(postsCount)
+
+	commentsCount, err := utils.GetCount(ctx, "comments")
+	if err != nil {
+		return nil, utils.WrapError(err, "failed to get comments count")
+	}
+	stats.TotalComments = int(commentsCount)
+
+	// Count admins (smaller set, iteration is acceptable)
+	adminsIter := firebase.DB.Collection("users").Where("is_admin", "==", true).Documents(ctx)
+	adminsCount := 0
+	for {
+		doc, err := adminsIter.Next()
+		// FIXED: Issue #65 - Proper iterator error handling
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			return nil, utils.WrapError(err, "failed to count admins")
+		}
+		if doc == nil {
+			break
+		}
+		adminsCount++
+	}
+	stats.TotalAdmins = adminsCount
+
+	// Additional metrics
+	// Active users (users with activity in last 30 days)
+	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
+	activeUsersIter := firebase.DB.Collection("users").
+		Where("updated_at", ">=", thirtyDaysAgo).
+		Documents(ctx)
+	activeCount := 0
+	for {
+		doc, err := activeUsersIter.Next()
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			break // Don't fail on this
+		}
+		if doc == nil {
+			break
+		}
+		activeCount++
+	}
+	stats.ActiveUsers = activeCount
+
+	// New users today
+	today := time.Now().Truncate(24 * time.Hour)
+	newUsersIter := firebase.DB.Collection("users").
+		Where("created_at", ">=", today).
+		Documents(ctx)
+	newUsersCount := 0
+	for {
+		doc, err := newUsersIter.Next()
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			break
+		}
+		if doc == nil {
+			break
+		}
+		newUsersCount++
+	}
+	stats.NewUsersToday = newUsersCount
+
+	// New posts today
+	newPostsIter := firebase.DB.Collection("posts").
+		Where("created_at", ">=", today).
+		Documents(ctx)
+	newPostsCount := 0
+	for {
+		doc, err := newPostsIter.Next()
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			break
+		}
+		if doc == nil {
+			break
+		}
+		newPostsCount++
+	}
+	stats.NewPostsToday = newPostsCount
+
+	// New comments today
+	newCommentsIter := firebase.DB.Collection("comments").
+		Where("created_at", ">=", today).
+		Documents(ctx)
+	newCommentsCount := 0
+	for {
+		doc, err := newCommentsIter.Next()
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			break
+		}
+		if doc == nil {
+			break
+		}
+		newCommentsCount++
+	}
+	stats.NewCommentsToday = newCommentsCount
+
+	// Total likes (count all like documents)
+	likesIter := firebase.DB.Collection("likes").Documents(ctx)
+	likesCount := 0
+	for {
+		doc, err := likesIter.Next()
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			break
+		}
+		if doc == nil {
+			break
+		}
+		likesCount++
+	}
+	stats.TotalLikes = likesCount
+
+	// Total bookmarks
+	bookmarksIter := firebase.DB.Collection("bookmarks").Documents(ctx)
+	bookmarksCount := 0
+	for {
+		doc, err := bookmarksIter.Next()
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			break
+		}
+		if doc == nil {
+			break
+		}
+		bookmarksCount++
+	}
+	stats.TotalBookmarks = bookmarksCount
+
+	// Total media
+	mediaCount, err := utils.GetCount(ctx, "media")
+	if err != nil {
+		mediaCount = 0 // Don't fail on this
+	}
+	stats.TotalMedia = int(mediaCount)
+
+	return stats, nil
+}
+
+// GetAdmins gets all admin users
+// FIXED: Issue #61 - Add pagination
+func (s *AdminService) GetAdmins(ctx context.Context, limit, offset int) ([]*models.User, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100 // Max limit
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	adminsQuery := firebase.DB.Collection("users").
+		Where("is_admin", "==", true).
+		Limit(limit).
+		Offset(offset)
+	iter := adminsQuery.Documents(ctx)
+
+	var admins []*models.User
+	for {
+		doc, err := iter.Next()
+		// FIXED: Issue #65 - Proper iterator error handling
+		if err != nil {
+			if err.Error() == "rpc error: code = NotFound desc = iterator done" {
+				break
+			}
+			return nil, utils.WrapError(err, "failed to get admins")
+		}
+		if doc == nil {
+			break
+		}
+		var user models.User
+		if err := doc.DataTo(&user); err != nil {
+			continue
+		}
+		user.ID = doc.Ref.ID
+		admins = append(admins, &user)
+	}
+
+	return admins, nil
+}
+
+// CreateAdmin creates a new admin user in Firebase Auth and Firestore
+func (s *AdminService) CreateAdmin(ctx context.Context, req *models.CreateAdminRequest) (*models.User, error) {
+	// Create user in Firebase Auth
+	userParams := (&auth.UserToCreate{}).
+		Email(req.Email).
+		Password(req.Password).
+		DisplayName(req.Name)
+
+	authUser, err := firebase.AuthClient.CreateUser(ctx, userParams)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create user profile in Firestore
+	user := models.User{
+		ID:             authUser.UID,
+		Name:           req.Name,
+		Email:          req.Email,
+		Avatar:         "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop",
+		IsAdmin:        true,
+		IsVerified:     true,
+		IsActive:       true,
+		Role:           req.Role,
+		Provider:       "email",
+		PostsCount:     0,
+		FollowersCount: 0,
+		FollowingCount: 0,
+	}
+
+	_, err = firebase.DB.Collection("users").Doc(authUser.UID).Set(ctx, user)
+	if err != nil {
+		// FIXED: Issue #59 - Improved rollback error handling
+		if delErr := firebase.AuthClient.DeleteUser(ctx, authUser.UID); delErr != nil {
+			return nil, utils.WrapErrorf(err, "failed to create user and rollback failed: %v", delErr)
+		}
+		return nil, utils.WrapError(err, "failed to create user in Firestore")
+	}
+
+	return &user, nil
+}
+
+// UpdateAdminRole updates an admin's role
+// FIXED: Issue #58 - Validate role against enum
+func (s *AdminService) UpdateAdminRole(ctx context.Context, adminID string, role string) error {
+	validRoles := map[string]bool{
+		models.RoleAdmin:      true,
+		models.RoleSuperAdmin: true,
+	}
+	if !validRoles[role] {
+		return errors.New("invalid role")
+	}
+
+	_, err := firebase.DB.Collection("users").Doc(adminID).Update(ctx, []firestore.Update{
+		{Path: "role", Value: role},
+	})
+
+	return err
+}
+
+// DeleteAdmin deletes an admin user
+func (s *AdminService) DeleteAdmin(ctx context.Context, adminID string) error {
+	// Delete from Firestore
+	_, err := firebase.DB.Collection("users").Doc(adminID).Delete(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Delete from Firebase Auth
+	err = firebase.AuthClient.DeleteUser(ctx, adminID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
