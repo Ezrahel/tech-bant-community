@@ -30,6 +30,9 @@ func main() {
 	}
 	defer supabase.Close()
 
+	// Initialize Supabase auth middleware with JWT secret
+	middleware.InitSupabaseAuth(cfg)
+
 	// Initialize Redis/Rate Limiting
 	rateLimitService, err := services.NewRateLimitService(cfg)
 	if err != nil {
@@ -154,9 +157,6 @@ func main() {
 	admin.HandleFunc("/users/{id}/verify", featuresHandler.VerifyUser).Methods("POST")
 	admin.HandleFunc("/reports", featuresHandler.GetReports).Methods("GET")
 	admin.HandleFunc("/reports/{id}/resolve", featuresHandler.ResolveReport).Methods("POST")
-	admin.HandleFunc("/users/{id}/ban", featuresHandler.BanUser).Methods("POST")
-	admin.HandleFunc("/users/{id}/unban", featuresHandler.UnbanUser).Methods("POST")
-	admin.HandleFunc("/users/{id}/verify", featuresHandler.VerifyUser).Methods("POST")
 
 	// Super admin only routes
 	superAdmin := admin.PathPrefix("").Subrouter()
@@ -164,7 +164,6 @@ func main() {
 	superAdmin.HandleFunc("/admins", adminHandler.CreateAdmin).Methods("POST")
 	superAdmin.HandleFunc("/admins/{id}/role", adminHandler.UpdateAdminRole).Methods("PUT")
 	superAdmin.HandleFunc("/admins/{id}", adminHandler.DeleteAdmin).Methods("DELETE")
-	superAdmin.HandleFunc("/users/{id}/promote", featuresHandler.PromoteToAdmin).Methods("POST")
 	superAdmin.HandleFunc("/users/{id}/promote", featuresHandler.PromoteToAdmin).Methods("POST")
 
 	// Health check

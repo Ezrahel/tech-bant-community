@@ -1,6 +1,6 @@
 # Tech Bant Community - Backend API
 
-A high-performance Go backend for the Tech Bant Community platform, built with Firebase Authentication and Firestore.
+A high-performance Go backend for the Tech Bant Community platform, built with Supabase (PostgreSQL, Authentication, and Storage).
 
 ## Architecture
 
@@ -10,28 +10,31 @@ This backend follows clean architecture principles with clear separation of conc
 - **Services**: Business logic layer
 - **Handlers**: HTTP request handlers
 - **Middleware**: Authentication, CORS, and other cross-cutting concerns
-- **Firebase**: Firebase initialization and client management
+- **Supabase**: Supabase initialization and client management (PostgreSQL, Auth, Storage)
 
 ## Features
 
-- 🔐 Firebase Authentication integration
-- 💾 Firestore database operations
-- 📁 Firebase Storage for media uploads
+- 🔐 Supabase Authentication integration
+- 💾 PostgreSQL database operations
+- 📁 Supabase Storage for media uploads
 - 📝 Posts CRUD operations
 - 👤 User profile management
 - 💬 Comments system
 - ❤️ Likes and bookmarks
 - 👑 Admin dashboard and management
 - 🚀 High performance with Go's concurrency
+- 🔄 Redis rate limiting and caching
+- 🔒 Two-factor authentication (2FA)
+- 🔐 OAuth integration (Google)
 
 ## Prerequisites
 
 - Go 1.21 or higher
-- Firebase project with:
+- Supabase project with:
   - Authentication enabled
-  - Firestore database
-  - Storage bucket
-- Firebase service account key JSON file
+  - PostgreSQL database
+  - Storage bucket configured
+- Redis (optional, for rate limiting and caching)
 
 ## Setup
 
@@ -44,10 +47,17 @@ This backend follows clean architecture principles with clear separation of conc
 2. **Configure environment variables:**
    ```bash
    export PORT=8080
-   export FIREBASE_PROJECT_ID=tech-bant-community
-   export FIREBASE_KEY_PATH=../tech-bant-community-firebase.json
-   export STORAGE_BUCKET=tech-bant-community.appspot.com
+   export SUPABASE_URL=https://your-project.supabase.co
+   export SUPABASE_ANON_KEY=your-anon-key
+   export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+   export SUPABASE_JWT_SECRET=your-jwt-secret
+   export SUPABASE_DB_URL=postgresql://user:password@host:port/dbname
+   export STORAGE_BUCKET=your-storage-bucket
    export ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+   export REDIS_ADDR=localhost:6379
+   export GOOGLE_CLIENT_ID=your-google-client-id
+   export GOOGLE_CLIENT_SECRET=your-google-client-secret
+   export RESEND_API_KEY=your-resend-api-key
    ```
 
 3. **Run the server:**
@@ -103,22 +113,28 @@ This backend follows clean architecture principles with clear separation of conc
 
 ## Authentication
 
-All protected endpoints require a Firebase ID token in the Authorization header:
+All protected endpoints require a Supabase JWT token in the Authorization header:
 
 ```
-Authorization: Bearer <firebase-id-token>
+Authorization: Bearer <supabase-jwt-token>
 ```
 
-The frontend should obtain this token from Firebase Auth and include it in all authenticated requests.
+The frontend should obtain this token from Supabase Auth and include it in all authenticated requests.
 
-## Firestore Collections
+## Database Schema
+
+The application uses PostgreSQL with the following main tables:
 
 - `users` - User profiles
 - `posts` - Posts
 - `comments` - Comments on posts
 - `likes` - Likes on posts and comments
 - `bookmarks` - User bookmarks
-- `media` - Media attachments metadata
+- `media_attachments` - Media attachments metadata
+- `reports` - Content reports
+- `follows` - User follow relationships
+- `otp_codes` - Two-factor authentication codes
+- `sessions` - User sessions
 
 ## Error Handling
 
@@ -137,11 +153,13 @@ All errors are returned in JSON format:
 ```
 server/
 ├── config/          # Configuration management
-├── firebase/         # Firebase initialization
+├── supabase/        # Supabase initialization
+├── database/        # Database utilities and schema
 ├── handlers/         # HTTP handlers
-├── middleware/       # Middleware (auth, CORS)
+├── middleware/       # Middleware (auth, CORS, RBAC)
 ├── models/           # Data models
 ├── services/         # Business logic
+├── utils/            # Utility functions
 ├── main.go          # Application entry point
 └── go.mod           # Go dependencies
 ```
@@ -156,17 +174,23 @@ server/
 ## Performance Considerations
 
 - Uses Go's native concurrency for handling multiple requests
-- Firestore queries are optimized with indexes
-- Media files are stored in Firebase Storage for CDN delivery
-- Connection pooling for Firebase clients
+- PostgreSQL queries are optimized with indexes
+- Media files are stored in Supabase Storage for CDN delivery
+- Connection pooling for PostgreSQL database
+- Redis caching for frequently accessed data
+- Rate limiting to prevent abuse
 
 ## Security
 
-- All user input is validated
-- Firebase Auth tokens are verified on every protected request
-- Admin endpoints require additional admin role check
+- All user input is validated and sanitized
+- Supabase JWT tokens are verified on every protected request
+- Role-based access control (RBAC) for admin endpoints
 - CORS is configured to allow only specified origins
 - File uploads are validated for type and size
+- Two-factor authentication (2FA) support
+- CSRF protection
+- Security headers middleware
+- Request body size limits
 
 ## License
 

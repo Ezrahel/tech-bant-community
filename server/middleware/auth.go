@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"tech-bant-community/server/firebase"
+	"tech-bant-community/server/database"
 )
 
 type contextKey string
@@ -14,7 +14,7 @@ type contextKey string
 const UserIDKey contextKey = "userID"
 const UserEmailKey contextKey = "userEmail"
 
-// AuthMiddleware validates Firebase ID tokens
+// AuthMiddleware validates Supabase JWT tokens
 func AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -33,8 +33,8 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		token := parts[1]
 		ctx := r.Context()
 
-		// Verify the token
-		decodedToken, err := firebase.AuthClient.VerifyIDToken(ctx, token)
+		// Verify the token via Supabase
+		userID, email, err := VerifySupabaseToken(ctx, token)
 		if err != nil {
 			// Don't leak error details for security
 			respondWithError(w, http.StatusUnauthorized, "Invalid or expired token")
@@ -42,8 +42,8 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		}
 
 		// Add user info to context
-		ctx = context.WithValue(ctx, UserIDKey, decodedToken.UID)
-		if email, ok := decodedToken.Claims["email"].(string); ok {
+		ctx = context.WithValue(ctx, UserIDKey, userID)
+		if email != "" {
 			ctx = context.WithValue(ctx, UserEmailKey, email)
 		}
 
@@ -61,10 +61,10 @@ func OptionalAuthMiddleware(next http.Handler) http.Handler {
 				token := parts[1]
 				ctx := r.Context()
 
-				decodedToken, err := firebase.AuthClient.VerifyIDToken(ctx, token)
+				userID, email, err := VerifySupabaseToken(ctx, token)
 				if err == nil {
-					ctx = context.WithValue(ctx, UserIDKey, decodedToken.UID)
-					if email, ok := decodedToken.Claims["email"].(string); ok {
+					ctx = context.WithValue(ctx, UserIDKey, userID)
+					if email != "" {
 						ctx = context.WithValue(ctx, UserEmailKey, email)
 					}
 					r = r.WithContext(ctx)
@@ -84,16 +84,11 @@ func AdminMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Check if user is admin in Firestore
+		// Check if user is admin in Postgres
 		ctx := r.Context()
-		userDoc, err := firebase.DB.Collection("users").Doc(userID.(string)).Get(ctx)
-		if err != nil {
-			respondWithError(w, http.StatusForbidden, "Failed to verify admin status")
-			return
-		}
-
-		isAdmin, ok := userDoc.Data()["is_admin"].(bool)
-		if !ok || !isAdmin {
+		var isAdmin bool
+		err := database.QueryRowWithContext(ctx, "SELECT is_admin FROM public.users WHERE id = $1", userID.(string)).Scan(&isAdmin)
+		if err != nil || !isAdmin {
 			respondWithError(w, http.StatusForbidden, "Admin access required")
 			return
 		}
