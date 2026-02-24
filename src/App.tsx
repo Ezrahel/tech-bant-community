@@ -3,23 +3,23 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Header from './components/Header';
-import LoginPage from './pages/LoginPage';
-import SignupPage from './pages/SignupPage';
-import HomePage from './pages/HomePage';
-import NewPostPage from './pages/NewPostPage';
-import DiscussionsPage from './pages/DiscussionsPage';
-import ReviewsPage from './pages/ReviewsPage';
-import SupportPage from './pages/SupportPage';
-import AdminDashboard from './pages/AdminDashboard';
-import UserProfilePage from './pages/UserProfilePage';
-import OAuthCallbackPage from './pages/OAuthCallbackPage';
-import PostDetailPage from './pages/PostDetailPage';
+import LoginPage from './views/LoginPage';
+import SignupPage from './views/SignupPage';
+import HomePage from './views/HomePage';
+import NewPostPage from './views/NewPostPage';
+import DiscussionsPage from './views/DiscussionsPage';
+import ReviewsPage from './views/ReviewsPage';
+import SupportPage from './views/SupportPage';
+import AdminDashboard from './views/AdminDashboard';
+import UserProfilePage from './views/UserProfilePage';
+import OAuthCallbackPage from './views/OAuthCallbackPage';
+import PostDetailPage from './views/PostDetailPage';
 
-function ProtectedRoute({ 
-  children, 
-  adminOnly = false 
-}: { 
-  children: React.ReactNode; 
+function ProtectedRoute({
+  children,
+  adminOnly = false
+}: {
+  children: React.ReactNode;
   adminOnly?: boolean;
 }) {
   const { user, loading } = useAuth();
@@ -63,7 +63,7 @@ function AppContent() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
-          
+
           <Route
             path="/admin"
             element={
@@ -72,7 +72,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/new-post"
             element={
@@ -81,7 +81,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/profile"
             element={
@@ -90,7 +90,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/profile/:userId"
             element={
@@ -99,7 +99,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/posts/:postId"
             element={
@@ -108,7 +108,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/discussions"
             element={
@@ -117,7 +117,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/reviews"
             element={
@@ -126,7 +126,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/support"
             element={
@@ -135,7 +135,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route
             path="/"
             element={
@@ -144,7 +144,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
-          
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -157,7 +157,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <AppContent />
-        <Toaster 
+        <Toaster
           position="bottom-right"
           toastOptions={{
             style: {

@@ -40,8 +40,8 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center space-x-8">
-            <Link 
-              to="/" 
+            <Link
+              to="/"
               className="flex items-center space-x-3 hover:opacity-80 transition-opacity group"
             >
               <div className="w-8 h-8 bg-white rounded-full flex items-center justify-center group-hover:scale-105 transition-transform">
@@ -49,49 +49,45 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
               </div>
               <h1 className="text-xl font-semibold tracking-tight">nothing community</h1>
             </Link>
-            
+
             {/* Navigation */}
             <nav className="hidden md:flex items-center space-x-1">
               <Link
                 to="/"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                  isActive('/')
+                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${isActive('/')
                     ? 'text-white bg-gray-900/50'
                     : 'text-gray-400 hover:text-white hover:bg-gray-900/30'
-                }`}
+                  }`}
               >
                 <Home className="w-4 h-4" />
                 <span>Home</span>
               </Link>
               <Link
                 to="/discussions"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                  isActive('/discussions')
+                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${isActive('/discussions')
                     ? 'text-white bg-gray-900/50'
                     : 'text-gray-400 hover:text-white hover:bg-gray-900/30'
-                }`}
+                  }`}
               >
                 <MessageSquare className="w-4 h-4" />
                 <span>Discussions</span>
               </Link>
               <Link
                 to="/reviews"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                  isActive('/reviews')
+                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${isActive('/reviews')
                     ? 'text-white bg-gray-900/50'
                     : 'text-gray-400 hover:text-white hover:bg-gray-900/30'
-                }`}
+                  }`}
               >
                 <Star className="w-4 h-4" />
                 <span>Reviews</span>
               </Link>
               <Link
                 to="/support"
-                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                  isActive('/support')
+                className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-sm font-medium transition-all ${isActive('/support')
                     ? 'text-white bg-gray-900/50'
                     : 'text-gray-400 hover:text-white hover:bg-gray-900/30'
-                }`}
+                  }`}
               >
                 <HelpCircle className="w-4 h-4" />
                 <span>Support</span>
@@ -114,7 +110,7 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
             </div>
 
             {/* Notifications */}
-            <button 
+            <button
               className="relative p-2.5 text-gray-400 hover:text-white hover:bg-gray-900/50 rounded-xl transition-all"
               aria-label="Notifications"
             >
@@ -132,7 +128,7 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
               <Plus className="w-4 h-4" />
               <span className="hidden sm:inline">Post</span>
             </button>
-            
+
             {/* User Profile Menu */}
             <div className="relative">
               <button
@@ -140,9 +136,9 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                 className="w-9 h-9 rounded-full overflow-hidden border-2 border-transparent hover:border-gray-700 transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               >
                 {userProfile?.avatar ? (
-                  <img 
-                    src={userProfile.avatar} 
-                    alt={userProfile.name || 'User'} 
+                  <img
+                    src={userProfile.avatar}
+                    alt={userProfile.name || 'User'}
                     className="w-full h-full object-cover"
                   />
                 ) : (
@@ -151,7 +147,7 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                   </div>
                 )}
               </button>
-              
+
               {showProfileMenu && (
                 <>
                   <div className="absolute right-0 mt-2 w-56 bg-gray-900/95 backdrop-blur-xl border border-gray-800 rounded-2xl shadow-apple-xl z-50 overflow-hidden">
@@ -159,9 +155,9 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                     <div className="p-4 border-b border-gray-800">
                       <div className="flex items-center space-x-3">
                         {userProfile?.avatar ? (
-                          <img 
-                            src={userProfile.avatar} 
-                            alt={userProfile.name} 
+                          <img
+                            src={userProfile.avatar}
+                            alt={userProfile.name}
                             className="w-10 h-10 rounded-full"
                           />
                         ) : (
@@ -172,7 +168,7 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-2">
                             <p className="text-sm font-semibold text-white truncate">
-                              {userProfile?.name || user?.displayName || 'User'}
+                              {userProfile?.name || user?.name || 'User'}
                             </p>
                             {userProfile?.isVerified && (
                               <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
@@ -202,7 +198,7 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                         <User className="w-4 h-4" />
                         <span>Profile</span>
                       </button>
-                      
+
                       <button
                         onClick={() => {
                           navigate('/profile?tab=settings');
@@ -238,10 +234,10 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                       </button>
                     </div>
                   </div>
-                  
+
                   {/* Click outside to close */}
-                  <div 
-                    className="fixed inset-0 z-40" 
+                  <div
+                    className="fixed inset-0 z-40"
                     onClick={() => setShowProfileMenu(false)}
                   />
                 </>

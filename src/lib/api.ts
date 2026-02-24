@@ -1,5 +1,5 @@
-// API client for Go backend - Pure REST API, no Firebase
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api/v1';
+// API client for Next.js backend - Pure REST API
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 export interface ApiError {
   error: string;
@@ -34,9 +34,9 @@ class ApiClient {
     const token = this.getAuthToken();
     const url = `${this.baseURL}${endpoint}`;
 
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     };
 
     if (token) {
@@ -49,7 +49,7 @@ class ApiClient {
       .split('; ')
       .find(row => row.startsWith('csrf_token='))
       ?.split('=')[1];
-    
+
     if (csrfToken) {
       headers['X-CSRF-Token'] = csrfToken;
     }
@@ -85,7 +85,7 @@ class ApiClient {
       }
 
       const data = await response.json();
-      
+
       // If response contains a token, store it
       if (data.token) {
         this.setAuthToken(data.token);
@@ -173,19 +173,19 @@ class ApiClient {
       });
 
       xhr.open('POST', `${this.baseURL}${endpoint}`);
-      
+
       // Add auth token
       const token = this.getAuthToken();
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }
-      
+
       // Get CSRF token
       const csrfToken = document.cookie
         .split('; ')
         .find(row => row.startsWith('csrf_token='))
         ?.split('=')[1];
-      
+
       if (csrfToken) {
         xhr.setRequestHeader('X-CSRF-Token', csrfToken);
       }
