@@ -27,48 +27,39 @@ export async function POST(req: NextRequest) {
             .single();
 
         if (existingUser) {
+            console.log('User already exists in users table:', email);
             return errorResponse('Unable to create account', 409);
         }
 
-        // Create user in Supabase Auth via REST API
-        const supabaseURL = getSupabaseURL();
-        const anonKey = getSupabaseAnonKey();
-
-        const authResp = await fetch(`${supabaseURL}/auth/v1/signup`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': anonKey,
-            },
-            body: JSON.stringify({
-                email,
-                password,
-                data: { name },
-            }),
+        // Create user in Supabase Auth using the SDK
+        // We use the admin client to bypass confirmation if possible, or skip triggers
+        // But for standard signup with email/password, we can use the admin client
+        // to manage auth precisely.
+        const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true, // Auto-confirm for this setup
+            user_metadata: { name }
         });
 
-        const authData = await authResp.json();
-        if (!authResp.ok) {
-            return errorResponse(authData.msg || authData.error_description || 'Signup failed', authResp.status);
+        if (authError || !authData.user) {
+            console.error('Supabase signup error:', authError);
+            return errorResponse(authError?.message || 'Signup failed', 400);
         }
 
-        const userID = authData.user?.id;
-        if (!userID) return errorResponse('Failed to create user');
+        const userID = authData.user.id;
 
-        // Get access token
-        let accessToken = authData.access_token || '';
+        // Get access token - since we created the user as admin, we might need to sign in
+        // or just proceed if we don't need the user's session token for the profile creation
+        // (which we don't since we use the admin client for DB operations)
+        let accessToken = '';
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
 
-        // If no token returned (email confirmation required), sign in to get one
-        if (!accessToken) {
-            const signInResp = await fetch(`${supabaseURL}/auth/v1/token?grant_type=password`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'apikey': anonKey },
-                body: JSON.stringify({ email, password }),
-            });
-            if (signInResp.ok) {
-                const signInData = await signInResp.json();
-                accessToken = signInData.access_token || '';
-            }
+        if (!signInError && signInData.session) {
+            accessToken = signInData.session.access_token;
         }
 
         const now = new Date().toISOString();

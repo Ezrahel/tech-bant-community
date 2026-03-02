@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody, withAuth, paginationParams } from '@/lib/api-helpers';
+import { jsonResponse, errorResponse, parseBody, withAuth, paginationParams, getUserFromRequest } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { createHash } from 'crypto';
 
@@ -13,7 +13,11 @@ export async function GET(req: NextRequest) {
 
         let query = supabase
             .from('posts')
-            .select('*, author:users!author_id(id, name, email, avatar, is_admin, is_verified)')
+            .select(`
+                *,
+                author:users!author_id(id, name, email, avatar, is_admin, is_verified),
+                media:media(id, type, url, name, size)
+            `)
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
@@ -22,9 +26,34 @@ export async function GET(req: NextRequest) {
         }
 
         const { data: posts, error } = await query;
-        if (error) return errorResponse('Failed to fetch posts', 500);
+        if (error) {
+            console.error('Supabase fetch posts error:', error);
+            return errorResponse('Failed to fetch posts', 500);
+        }
 
-        return jsonResponse(posts || []);
+        // Check for likes/bookmarks if user is authenticated
+        const user = await getUserFromRequest(req);
+        let postsWithStatus = posts || [];
+
+        if (user && posts && posts.length > 0) {
+            const postIds = posts.map(p => p.id);
+
+            const [{ data: userLikes }, { data: userBookmarks }] = await Promise.all([
+                supabase.from('likes').select('post_id').in('post_id', postIds).eq('user_id', user.id),
+                supabase.from('bookmarks').select('post_id').in('post_id', postIds).eq('user_id', user.id)
+            ]);
+
+            const likedPostIds = new Set(userLikes?.map(l => l.post_id) || []);
+            const bookmarkedPostIds = new Set(userBookmarks?.map(b => b.post_id) || []);
+
+            postsWithStatus = posts.map(post => ({
+                ...post,
+                is_liked: likedPostIds.has(post.id),
+                is_bookmarked: bookmarkedPostIds.has(post.id)
+            }));
+        }
+
+        return jsonResponse(postsWithStatus);
     } catch (error: unknown) {
         console.error('Get posts error:', error);
         return errorResponse('Internal server error', 500);
@@ -97,6 +126,21 @@ export async function POST(req: NextRequest) {
             .single();
 
         if (error) return errorResponse('Failed to create post', 500);
+
+        // Link media if provided
+        if (mediaIds && mediaIds.length > 0) {
+            const { error: mediaError } = await supabase
+                .from('media')
+                .update({ post_id: post.id })
+                .in('id', mediaIds)
+                .eq('user_id', user.id);
+
+            if (mediaError) {
+                console.error('Failed to link media:', mediaError);
+                // We don't fail the whole post creation if media linking fails, 
+                // but we should probably log it.
+            }
+        }
 
         // Increment user posts count
         const { data: authorProfile } = await supabase

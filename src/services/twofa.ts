@@ -1,4 +1,4 @@
-// Two-Factor Authentication service using Go backend API with Supabase
+// Two-Factor Authentication service using Next.js backend API with Supabase
 // All OTP emails are sent via Resend API
 import { apiClient } from '../lib/api';
 

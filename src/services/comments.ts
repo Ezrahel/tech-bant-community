@@ -1,4 +1,4 @@
-// Comments service using Go backend API
+// Comments service using Next.js backend API
 import { apiClient } from '../lib/api';
 
 export interface CreateCommentData {

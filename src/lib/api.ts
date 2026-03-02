@@ -103,8 +103,7 @@ class ApiClient {
         });
         throw new Error(
           `Cannot connect to backend server at ${this.baseURL}. ` +
-          `Please ensure the backend server is running on port 8080. ` +
-          `If it is running, check CORS configuration. ` +
+          `Please ensure the backend server is running. ` +
           `Error: ${error.message}`
         );
       }

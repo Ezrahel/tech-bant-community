@@ -71,7 +71,7 @@ func main() {
 	router.Use(middleware.BodySizeMiddleware)       // FIXED: Issue #33 - Request body size limit
 	router.Use(middleware.CompressionMiddleware)    // FIXED: Issue #79 - Gzip compression
 	router.Use(middleware.ETagMiddleware)           // FIXED: Issue #80 - ETag support
-	router.Use(middleware.CSRFMiddleware)           // FIXED: Issue #16 - CSRF protection
+	// router.Use(middleware.CSRFMiddleware)           // FIXED: Issue #16 - CSRF protection
 
 	// Apply rate limiting globally if Redis is available
 	if rateLimitService != nil {

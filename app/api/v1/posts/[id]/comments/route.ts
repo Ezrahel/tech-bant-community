@@ -44,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         if (authResult instanceof Response) return authResult;
         const { user } = authResult;
 
-        const body = await parseBody<{ content: string }>(req);
+        const body = await parseBody<{ content: string; parent_id?: string }>(req);
         if (!body?.content?.trim()) return errorResponse('Content is required');
 
         const supabase = getSupabaseAdmin();
@@ -58,6 +58,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             .insert({
                 post_id: postId,
                 author_id: user.id,
+                parent_id: body.parent_id || null,
                 content,
                 created_at: now,
                 updated_at: now,
@@ -68,8 +69,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         if (error) return errorResponse('Failed to create comment', 500);
 
         // Increment post comments count
-        const { data: post } = await supabase.from('posts').select('comments').eq('id', postId).single();
-        await supabase.from('posts').update({ comments: (post?.comments || 0) + 1 }).eq('id', postId);
+        const { count: commentCount } = await supabase
+            .from('comments')
+            .select('*', { count: 'exact', head: true })
+            .eq('post_id', postId);
+
+        await supabase
+            .from('posts')
+            .update({
+                comments: commentCount || 0,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', postId);
 
         // Update counters
         await supabase.from('counters').upsert(

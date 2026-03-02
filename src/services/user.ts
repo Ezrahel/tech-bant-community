@@ -1,4 +1,4 @@
-// User service using Go backend API
+// User service using Next.js backend API
 import { apiClient } from '../lib/api';
 import { User } from '../types';
 

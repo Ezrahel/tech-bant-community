@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody, withAuth } from '@/lib/api-helpers';
+import { jsonResponse, errorResponse, parseBody, withAuth, getUserFromRequest } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
 // GET /posts/[id]
@@ -10,19 +10,45 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         const { data: post, error } = await supabase
             .from('posts')
-            .select('*, author:users!author_id(id, name, email, avatar, is_admin, is_verified)')
+            .select(`
+                *,
+                author:users!author_id(id, name, email, avatar, is_admin, is_verified),
+                media:media(id, type, url, name, size)
+            `)
             .eq('id', id)
             .single();
 
         if (error || !post) return errorResponse('Post not found', 404);
 
-        // Increment views
+        // Check if current user has liked/bookmarked if authenticated
+        let isLiked = false;
+        let isBookmarked = false;
+
+        const user = await getUserFromRequest(req);
+        if (user) {
+            const [{ data: like }, { data: bookmark }] = await Promise.all([
+                supabase.from('likes').select('id').eq('post_id', id).eq('user_id', user.id).single(),
+                supabase.from('bookmarks').select('id').eq('post_id', id).eq('user_id', user.id).single()
+            ]);
+            isLiked = !!like;
+            isBookmarked = !!bookmark;
+        }
+
+        // Increment views (Non-atomic for now as standard Supabase JS client limitation without RPC)
         await supabase
             .from('posts')
-            .update({ views: (post.views || 0) + 1 })
+            .update({
+                views: (post.views || 0) + 1,
+                updated_at: post.updated_at // Keep original updated_at if we don't want view to trigger update
+            })
             .eq('id', id);
 
-        return jsonResponse(post);
+        return jsonResponse({
+            ...post,
+            is_liked: isLiked,
+            is_bookmarked: isBookmarked,
+            views: (post.views || 0) + 1 // Reflect the increment in response
+        });
     } catch (error: unknown) {
         console.error('Get post error:', error);
         return errorResponse('Internal server error', 500);

@@ -33,14 +33,27 @@ export async function getUserFromRequest(req: NextRequest): Promise<AuthUser | n
     try {
         const supabase = getSupabaseAdmin();
         const { data, error } = await supabase.auth.getUser(token);
-        if (error || !data.user) return null;
+
+        if (error) {
+            console.error('getUserFromRequest: Supabase auth error:', error);
+            return null;
+        }
+
+        if (!data.user) {
+            console.error('getUserFromRequest: No user in data');
+            return null;
+        }
 
         // Get user profile from public.users
-        const { data: profile } = await supabase
+        const { data: profile, error: profileError } = await supabase
             .from('users')
             .select('role, is_admin')
             .eq('id', data.user.id)
             .single();
+
+        if (profileError) {
+            console.error('getUserFromRequest: Profile fetch error:', profileError);
+        }
 
         return {
             id: data.user.id,

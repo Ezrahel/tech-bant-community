@@ -25,6 +25,9 @@ export interface Post {
   likes: number;
   comments: number;
   views: number;
+  shares: number;
+  isLiked?: boolean;
+  isBookmarked?: boolean;
   publishedAt: string;
   isPinned?: boolean;
   isHot?: boolean;

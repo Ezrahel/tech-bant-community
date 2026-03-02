@@ -65,8 +65,6 @@ CREATE TABLE IF NOT EXISTS public.likes (
     comment_id UUID REFERENCES public.comments(id) ON DELETE CASCADE,
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(post_id, user_id) WHERE post_id IS NOT NULL,
-    UNIQUE(comment_id, user_id) WHERE comment_id IS NOT NULL,
     CHECK ((post_id IS NOT NULL AND comment_id IS NULL) OR (post_id IS NULL AND comment_id IS NOT NULL))
 );
 
@@ -209,8 +207,8 @@ CREATE INDEX IF NOT EXISTS idx_comments_post ON public.comments(post_id);
 CREATE INDEX IF NOT EXISTS idx_comments_post_created ON public.comments(post_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_comments_author ON public.comments(author_id);
 CREATE INDEX IF NOT EXISTS idx_comments_parent ON public.comments(parent_id);
-CREATE INDEX IF NOT EXISTS idx_likes_post_user ON public.likes(post_id, user_id) WHERE post_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS idx_likes_comment_user ON public.likes(comment_id, user_id) WHERE comment_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_likes_post_user ON public.likes(post_id, user_id) WHERE post_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_likes_comment_user ON public.likes(comment_id, user_id) WHERE comment_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_bookmarks_post_user ON public.bookmarks(post_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_user ON public.bookmarks(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON public.sessions(user_id);
@@ -234,56 +232,76 @@ ALTER TABLE public.bookmarks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.media ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for users
+DROP POLICY IF EXISTS "Users can read own profile" ON public.users;
 CREATE POLICY "Users can read own profile" ON public.users
     FOR SELECT USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users can update own profile" ON public.users;
 CREATE POLICY "Users can update own profile" ON public.users
     FOR UPDATE USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Public profiles are readable" ON public.users;
 CREATE POLICY "Public profiles are readable" ON public.users
     FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Users can insert own profile" ON public.users;
+CREATE POLICY "Users can insert own profile" ON public.users
+    FOR INSERT WITH CHECK (true);
+
 -- RLS Policies for posts
+DROP POLICY IF EXISTS "Public posts are readable" ON public.posts;
 CREATE POLICY "Public posts are readable" ON public.posts
     FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Users can create own posts" ON public.posts;
 CREATE POLICY "Users can create own posts" ON public.posts
     FOR INSERT WITH CHECK (auth.uid() = author_id);
 
+DROP POLICY IF EXISTS "Users can update own posts" ON public.posts;
 CREATE POLICY "Users can update own posts" ON public.posts
     FOR UPDATE USING (auth.uid() = author_id);
 
+DROP POLICY IF EXISTS "Users can delete own posts" ON public.posts;
 CREATE POLICY "Users can delete own posts" ON public.posts
     FOR DELETE USING (auth.uid() = author_id);
 
 -- RLS Policies for comments
+DROP POLICY IF EXISTS "Comments are readable" ON public.comments;
 CREATE POLICY "Comments are readable" ON public.comments
     FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Users can create comments" ON public.comments;
 CREATE POLICY "Users can create comments" ON public.comments
     FOR INSERT WITH CHECK (auth.uid() = author_id);
 
+DROP POLICY IF EXISTS "Users can update own comments" ON public.comments;
 CREATE POLICY "Users can update own comments" ON public.comments
     FOR UPDATE USING (auth.uid() = author_id);
 
+DROP POLICY IF EXISTS "Users can delete own comments" ON public.comments;
 CREATE POLICY "Users can delete own comments" ON public.comments
     FOR DELETE USING (auth.uid() = author_id);
 
 -- RLS Policies for likes
+DROP POLICY IF EXISTS "Likes are readable" ON public.likes;
 CREATE POLICY "Likes are readable" ON public.likes
     FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Users can manage own likes" ON public.likes;
 CREATE POLICY "Users can manage own likes" ON public.likes
     FOR ALL USING (auth.uid() = user_id);
 
 -- RLS Policies for bookmarks
+DROP POLICY IF EXISTS "Users can manage own bookmarks" ON public.bookmarks;
 CREATE POLICY "Users can manage own bookmarks" ON public.bookmarks
     FOR ALL USING (auth.uid() = user_id);
 
 -- RLS Policies for media
+DROP POLICY IF EXISTS "Media is readable" ON public.media;
 CREATE POLICY "Media is readable" ON public.media
     FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Users can manage own media" ON public.media;
 CREATE POLICY "Users can manage own media" ON public.media
     FOR ALL USING (auth.uid() = user_id);
 
@@ -297,12 +315,15 @@ END;
 $$ language 'plpgsql';
 
 -- Triggers for updated_at
+DROP TRIGGER IF EXISTS update_users_updated_at ON public.users;
 CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_posts_updated_at ON public.posts;
 CREATE TRIGGER update_posts_updated_at BEFORE UPDATE ON public.posts
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_comments_updated_at ON public.comments;
 CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON public.comments
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 

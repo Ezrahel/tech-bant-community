@@ -1,6 +1,17 @@
 // New post page with Apple design philosophy
 import React, { useState, useRef, DragEvent } from 'react';
-import { X, ChevronDown, Image, Film, Upload, MapPin, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faTimes,
+  faChevronDown,
+  faImage,
+  faFilm,
+  faUpload,
+  faMapPin,
+  faSpinner,
+  faExclamationCircle,
+  faCheckCircle
+} from '@fortawesome/free-solid-svg-icons';
 import { useNavigate } from 'react-router-dom';
 import { postsService } from '../services/posts';
 import { useAuth } from '../contexts/AuthContext';
@@ -32,15 +43,7 @@ const NewPostPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getCategoryColor = (cat: string) => {
-    const colors: Record<string, string> = {
-      general: 'text-gray-400',
-      tech: 'text-blue-400',
-      reviews: 'text-purple-400',
-      updates: 'text-green-400',
-      gists: 'text-orange-400',
-      banter: 'text-pink-400',
-    };
-    return colors[cat] || colors.general;
+    return 'text-gray-400';
   };
 
   const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -66,7 +69,7 @@ const NewPostPage: React.FC = () => {
 
     try {
       const fileArray = Array.from(files).slice(0, 10 - media.length);
-      
+
       for (const file of fileArray) {
         if (file.size > 10 * 1024 * 1024) {
           setError(`File ${file.name} is too large (max 10MB)`);
@@ -146,7 +149,7 @@ const NewPostPage: React.FC = () => {
           onClick={() => navigate(-1)}
           className="flex items-center space-x-2 text-gray-400 hover:text-white transition-colors text-sm"
         >
-          <X className="w-4 h-4" />
+          <FontAwesomeIcon icon={faTimes} className="w-4 h-4" />
           <span>Cancel</span>
         </button>
       </div>
@@ -163,7 +166,7 @@ const NewPostPage: React.FC = () => {
             >
               {isPosting ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <FontAwesomeIcon icon={faSpinner} className="w-4 h-4 animate-spin" />
                   <span>Publishing...</span>
                 </>
               ) : (
@@ -174,7 +177,7 @@ const NewPostPage: React.FC = () => {
 
           {error && (
             <div className="mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start space-x-3">
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <FontAwesomeIcon icon={faExclamationCircle} className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
               <p className="text-red-400 text-sm flex-1">{error}</p>
             </div>
           )}
@@ -211,10 +214,10 @@ const NewPostPage: React.FC = () => {
               <span className={getCategoryColor(category)}>
                 {postCategories.find((c) => c.id === category)?.name}
               </span>
-              <ChevronDown
-                className={`w-4 h-4 text-gray-400 transition-transform ${
-                  showCategoryDropdown ? 'rotate-180' : ''
-                }`}
+              <FontAwesomeIcon
+                icon={faChevronDown}
+                className={`w-4 h-4 text-gray-400 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''
+                  }`}
               />
             </button>
 
@@ -229,11 +232,10 @@ const NewPostPage: React.FC = () => {
                         setCategory(cat.id);
                         setShowCategoryDropdown(false);
                       }}
-                      className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors ${
-                        category === cat.id
-                          ? 'bg-gray-800/50 text-white'
-                          : 'text-gray-300 hover:bg-gray-800/30'
-                      }`}
+                      className={`w-full flex items-center justify-between px-4 py-3 text-left transition-colors ${category === cat.id
+                        ? 'bg-gray-800/50 text-white'
+                        : 'text-gray-300 hover:bg-gray-800/30'
+                        }`}
                     >
                       <div>
                         <div className={`font-medium ${getCategoryColor(cat.id)}`}>
@@ -242,7 +244,7 @@ const NewPostPage: React.FC = () => {
                         <div className="text-xs text-gray-500 mt-0.5">{cat.description}</div>
                       </div>
                       {category === cat.id && (
-                        <CheckCircle2 className="w-4 h-4 text-blue-400" />
+                        <FontAwesomeIcon icon={faCheckCircle} className="w-4 h-4 text-white" />
                       )}
                     </button>
                   ))}
@@ -318,7 +320,7 @@ const NewPostPage: React.FC = () => {
                       onClick={() => removeTag(tag)}
                       className="hover:text-white transition-colors"
                     >
-                      <X className="w-3 h-3" />
+                      <FontAwesomeIcon icon={faTimes} className="w-3 h-3" />
                     </button>
                   </span>
                 ))}
@@ -332,7 +334,7 @@ const NewPostPage: React.FC = () => {
               Location (optional)
             </label>
             <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
+              <FontAwesomeIcon icon={faMapPin} className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-500 w-5 h-5" />
               <input
                 id="location"
                 type="text"
@@ -352,17 +354,16 @@ const NewPostPage: React.FC = () => {
               setDragOver(true);
             }}
             onDragLeave={() => setDragOver(false)}
-            className={`mb-6 border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-              dragOver
-                ? 'border-blue-500 bg-blue-500/10'
-                : 'border-gray-700 bg-gray-800/30 hover:border-gray-600'
-            }`}
+            className={`mb-6 border-2 border-dashed rounded-xl p-8 text-center transition-colors ${dragOver
+              ? 'border-blue-500 bg-blue-500/10'
+              : 'border-gray-700 bg-gray-800/30 hover:border-gray-600'
+              }`}
           >
             {media.length === 0 ? (
               <div className="space-y-4">
                 <div className="flex justify-center">
                   <div className="w-16 h-16 bg-gray-800 rounded-full flex items-center justify-center">
-                    <Upload className="w-8 h-8 text-gray-500" />
+                    <FontAwesomeIcon icon={faUpload} className="w-8 h-8 text-gray-500" />
                   </div>
                 </div>
                 <div>
@@ -392,7 +393,7 @@ const NewPostPage: React.FC = () => {
                         />
                       ) : (
                         <div className="w-full h-32 bg-gray-800 rounded-xl flex items-center justify-center">
-                          <Film className="w-8 h-8 text-gray-500" />
+                          <FontAwesomeIcon icon={faFilm} className="w-8 h-8 text-gray-500" />
                         </div>
                       )}
                       <button
@@ -400,7 +401,7 @@ const NewPostPage: React.FC = () => {
                         onClick={() => setMedia(media.filter((m) => m.id !== item.id))}
                         className="absolute top-2 right-2 w-6 h-6 bg-black/70 hover:bg-black/90 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                       >
-                        <X className="w-3 h-3" />
+                        <FontAwesomeIcon icon={faTimes} className="w-3 h-3" />
                       </button>
                     </div>
                   ))}

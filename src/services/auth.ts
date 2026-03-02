@@ -1,4 +1,4 @@
-// Authentication service using Go backend API only (no Firebase)
+// Authentication service using Node.js/Next.js backend API
 import { apiClient } from '../lib/api';
 import { User } from '../types';
 
@@ -62,7 +62,7 @@ class AuthService {
     try {
       // Redirect to backend OAuth endpoint
       const redirectUrl = encodeURIComponent(window.location.origin + '/oauth-callback');
-      window.location.href = `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'}/api/v1/auth/oauth/google?redirect_url=${redirectUrl}`;
+      window.location.href = `${import.meta.env.VITE_API_BASE_URL || ''}/api/v1/auth/oauth/google?redirect_url=${redirectUrl}`;
     } catch (error: any) {
       console.error('Google login error:', error);
       throw new Error(error.message || 'Failed to sign in with Google');

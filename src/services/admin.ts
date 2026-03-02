@@ -1,4 +1,4 @@
-// Admin service using Go backend API
+// Admin service using Next.js backend API
 import { apiClient } from '../lib/api';
 
 export interface AdminStats {

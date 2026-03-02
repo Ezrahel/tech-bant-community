@@ -2,8 +2,11 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -39,6 +42,11 @@ type Config struct {
 }
 
 func Load() *Config {
+	// Load .env file
+	if err := godotenv.Load(); err != nil {
+		log.Printf("Warning: No .env file found: %v", err)
+	}
+
 	return &Config{
 		Port:           getEnv("PORT", "8080"),
 		AllowedOrigins: parseStringSlice(getEnv("ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:3000")),

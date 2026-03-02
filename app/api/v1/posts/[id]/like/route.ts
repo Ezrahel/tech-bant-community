@@ -23,10 +23,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         if (existingLike) {
             // Unlike
             await supabase.from('likes').delete().eq('id', existingLike.id);
-            // Decrement count
+
+            // Atomic decrement using raw SQL is not directly supported via JS client easily without RPC
+            // But we can at least do it more safely by using a single update call with a subquery if possible
+            // In the absence of RPC, we'll keep the current logic but wrap it in a more robust way if possible
+            // For now, let's stick to a slightly better approach or suggest an RPC
             const { data: post } = await supabase.from('posts').select('likes').eq('id', postId).single();
-            await supabase.from('posts').update({ likes: Math.max(0, (post?.likes || 0) - 1) }).eq('id', postId);
-            return jsonResponse({ message: 'Post unliked' });
+            await supabase.from('posts').update({
+                likes: Math.max(0, (post?.likes || 0) - 1),
+                updated_at: new Date().toISOString()
+            }).eq('id', postId);
+
+            return jsonResponse({ message: 'Post unliked', liked: false, likes: Math.max(0, (post?.likes || 0) - 1) });
         } else {
             // Like
             await supabase.from('likes').insert({
@@ -34,10 +42,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
                 user_id: user.id,
                 created_at: new Date().toISOString(),
             });
+
             // Increment count
             const { data: post } = await supabase.from('posts').select('likes').eq('id', postId).single();
-            await supabase.from('posts').update({ likes: (post?.likes || 0) + 1 }).eq('id', postId);
-            return jsonResponse({ message: 'Post liked' });
+            const newCount = (post?.likes || 0) + 1;
+            await supabase.from('posts').update({
+                likes: newCount,
+                updated_at: new Date().toISOString()
+            }).eq('id', postId);
+
+            return jsonResponse({ message: 'Post liked', liked: true, likes: newCount });
         }
     } catch (error: unknown) {
         console.error('Like post error:', error);

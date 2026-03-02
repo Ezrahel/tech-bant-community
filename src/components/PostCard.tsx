@@ -1,10 +1,26 @@
 // Post card component with Apple design philosophy
 import React, { useState } from 'react';
-import { Heart, MessageSquare, Eye, Bookmark, Share2, MoreHorizontal, Flame, Shield, CheckCircle2 } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import {
+  faHeart as faHeartSolid,
+  faComment,
+  faEye,
+  faBookmark as faBookmarkSolid,
+  faFire,
+  faShieldAlt,
+  faCheckCircle
+} from '@fortawesome/free-solid-svg-icons';
+import {
+  faHeart as faHeartRegular,
+  faBookmark as faBookmarkRegular
+} from '@fortawesome/free-regular-svg-icons';
 import { useNavigate } from 'react-router-dom';
 import { Post } from '../types';
 import { postsService } from '../services/posts';
 import { useAuth } from '../contexts/AuthContext';
+import ShareMenu from './ShareMenu';
+import ManagementMenu from './ManagementMenu';
+import ImageCollage from './ImageCollage';
 
 interface PostCardProps {
   post: Post;
@@ -13,22 +29,15 @@ interface PostCardProps {
 
 const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
-  const [liked, setLiked] = useState(false);
-  const [bookmarked, setBookmarked] = useState(false);
+  const { isAuthenticated, userProfile } = useAuth();
+  const [liked, setLiked] = useState(post.isLiked || false);
+  const [bookmarked, setBookmarked] = useState(post.isBookmarked || false);
   const [likesCount, setLikesCount] = useState(post.likes);
+  const [sharesCount, setSharesCount] = useState(post.shares || 0);
   const [loading, setLoading] = useState(false);
 
   const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      general: 'text-gray-400 bg-gray-800/50',
-      tech: 'text-blue-400 bg-blue-500/10',
-      reviews: 'text-purple-400 bg-purple-500/10',
-      updates: 'text-green-400 bg-green-500/10',
-      gists: 'text-orange-400 bg-orange-500/10',
-      banter: 'text-pink-400 bg-pink-500/10',
-    };
-    return colors[category] || colors.general;
+    return 'text-gray-300 bg-gray-800/50';
   };
 
   const formatNumber = (num: number) => {
@@ -72,17 +81,20 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
       return;
     }
 
-    if (loading) return;
-    setLoading(true);
+    // Optimistic update
+    const newLiked = !liked;
+    const newCount = newLiked ? likesCount + 1 : Math.max(0, likesCount - 1);
+
+    setLiked(newLiked);
+    setLikesCount(newCount);
 
     try {
       await postsService.likePost(post.id);
-      setLiked(!liked);
-      setLikesCount((prev) => (liked ? prev - 1 : prev + 1));
     } catch (error) {
       console.error('Error liking post:', error);
-    } finally {
-      setLoading(false);
+      // Revert on error
+      setLiked(!newLiked);
+      setLikesCount(likesCount);
     }
   };
 
@@ -93,17 +105,40 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
       return;
     }
 
-    if (loading) return;
-    setLoading(true);
+    // Optimistic update
+    const newBookmarked = !bookmarked;
+    setBookmarked(newBookmarked);
 
     try {
       await postsService.bookmarkPost(post.id);
-      setBookmarked(!bookmarked);
     } catch (error) {
       console.error('Error bookmarking post:', error);
-    } finally {
-      setLoading(false);
+      // Revert on error
+      setBookmarked(!newBookmarked);
     }
+  };
+
+  const handleShare = async () => {
+    try {
+      setSharesCount(prev => prev + 1);
+      await postsService.sharePost(post.id);
+    } catch (error) {
+      console.error('Error sharing post:', error);
+      setSharesCount(prev => Math.max(0, prev - 1));
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await postsService.deletePost(post.id);
+      window.location.reload();
+    } catch (error) {
+      console.error('Error deleting post:', error);
+    }
+  };
+
+  const handleEdit = () => {
+    navigate(`/posts/${post.id}?edit=true`);
   };
 
   const handleClick = () => {
@@ -117,19 +152,19 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   return (
     <article
       onClick={handleClick}
-      className="bg-gray-900/30 backdrop-blur-sm border border-gray-800/50 rounded-2xl p-6 hover:bg-gray-900/50 hover:border-gray-700/50 transition-all duration-300 group cursor-pointer"
+      className="bg-gray-900/40 backdrop-blur-xl border border-gray-800/50 rounded-2xl p-4 sm:p-6 hover:bg-gray-900/60 hover:border-gray-700/50 transition-all duration-300 group cursor-pointer shadow-apple-sm"
     >
-      <div className="flex items-start space-x-4">
+      <div className="flex items-start space-x-3 sm:space-x-4">
         {/* Avatar */}
         <div className="relative flex-shrink-0">
           <img
             src={post.author.avatar}
             alt={post.author.name}
-            className="w-11 h-11 rounded-full object-cover border-2 border-gray-800"
+            className="w-9 h-9 sm:w-11 sm:h-11 rounded-full object-cover border-2 border-gray-800 shadow-apple-sm"
           />
           {post.author.isAdmin && (
-            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center border-2 border-black">
-              <Shield className="w-2.5 h-2.5 text-white" />
+            <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-gray-600 rounded-full flex items-center justify-center border-2 border-black">
+              <FontAwesomeIcon icon={faShieldAlt} className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" />
             </div>
           )}
         </div>
@@ -137,106 +172,59 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
         {/* Content */}
         <div className="flex-1 min-w-0">
           {/* Header */}
-          <div className="flex items-center flex-wrap gap-2 mb-3">
-            <div className="flex items-center space-x-2">
-              <span className="font-semibold text-white text-sm">{post.author.name}</span>
+          <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 mb-2 sm:mb-3">
+            <div className="flex items-center space-x-1.5 sm:space-x-2">
+              <span className="font-bold text-white text-xs sm:text-sm truncate max-w-[100px] sm:max-w-none">{post.author.name}</span>
               {post.author.isVerified && !post.author.isAdmin && (
-                <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <CheckCircle2 className="w-2.5 h-2.5 text-white" />
-                </div>
+                <FontAwesomeIcon icon={faCheckCircle} className="w-3.5 h-3.5 text-gray-400" />
               )}
               {post.author.isAdmin && (
-                <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-semibold uppercase tracking-wide">
+                <span className="text-[10px] bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded-md font-bold uppercase tracking-wider">
                   Admin
                 </span>
               )}
             </div>
-            <span className="text-gray-500 text-xs">•</span>
-            <span className="text-gray-500 text-xs">{formatDate(post.publishedAt)}</span>
+            <span className="text-gray-600 text-[10px] sm:text-xs">•</span>
+            <span className="text-gray-500 text-[10px] sm:text-xs font-medium">{formatDate(post.publishedAt)}</span>
             <span
-              className={`text-[10px] px-2.5 py-1 rounded-full font-medium uppercase tracking-wide ${getCategoryColor(
+              className={`text-[9px] sm:text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${getCategoryColor(
                 post.category
               )}`}
             >
               {post.category}
             </span>
-            {post.isPinned && (
-              <span className="text-[10px] px-2.5 py-1 rounded-full bg-yellow-500/10 text-yellow-400 font-medium">
-                Pinned
-              </span>
-            )}
-            {post.isHot && (
-              <div className="flex items-center space-x-1 text-orange-400">
-                <Flame className="w-3 h-3" />
-                <span className="text-[10px] font-medium">Hot</span>
-              </div>
-            )}
           </div>
 
           {/* Title */}
-          <h3 className="text-lg font-semibold text-white mb-2 group-hover:text-gray-200 transition-colors line-clamp-2">
+          <h3 className="text-base sm:text-lg font-bold text-white mb-2 group-hover:text-white transition-colors line-clamp-2 leading-tight">
             {post.title}
           </h3>
 
           {/* Content Preview */}
-          <p className="text-gray-400 text-sm mb-4 line-clamp-3 leading-relaxed">
+          <p className="text-gray-400 text-xs sm:text-sm mb-4 line-clamp-2 sm:line-clamp-3 leading-relaxed font-medium">
             {post.content.replace(/<[^>]*>/g, '')}
           </p>
 
-          {/* Tags */}
-          {post.tags && post.tags.length > 0 && (
-            <div className="flex flex-wrap gap-2 mb-4">
-              {post.tags.slice(0, 5).map((tag) => (
-                <span
-                  key={tag}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Navigate to tag search
-                  }}
-                  className="text-xs bg-gray-800/50 text-gray-300 px-2.5 py-1 rounded-lg hover:bg-gray-800 transition-colors cursor-pointer"
-                >
-                  #{tag}
-                </span>
-              ))}
-              {post.tags.length > 5 && (
-                <span className="text-xs text-gray-500 px-2.5 py-1">
-                  +{post.tags.length - 5} more
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Media Preview */}
+          {/* Media Collage */}
           {post.media && post.media.length > 0 && (
-            <div className="mb-4 rounded-xl overflow-hidden">
-              {post.media[0].type === 'image' ? (
-                <img
-                  src={post.media[0].url}
-                  alt={post.media[0].name}
-                  className="w-full h-64 object-cover"
-                />
-              ) : (
-                <div className="w-full h-64 bg-gray-800 flex items-center justify-center">
-                  <span className="text-gray-500 text-sm">Video content</span>
-                </div>
-              )}
+            <div className="mb-4">
+              <ImageCollage media={post.media} />
             </div>
           )}
 
           {/* Actions */}
-          <div className="flex items-center justify-between pt-4 border-t border-gray-800/50">
-            <div className="flex items-center space-x-6">
+          <div className="flex items-center justify-between pt-3 sm:pt-4 border-t border-gray-800/50">
+            <div className="flex items-center space-x-4 sm:space-x-6">
               <button
                 onClick={handleLike}
                 disabled={loading}
-                className={`flex items-center space-x-2 transition-colors ${
-                  liked
-                    ? 'text-red-400'
-                    : 'text-gray-500 hover:text-red-400'
-                }`}
+                className={`flex items-center space-x-1.5 sm:space-x-2 transition-all ${liked
+                  ? 'text-white'
+                  : 'text-gray-500 hover:text-white'
+                  }`}
               >
-                <Heart className={`w-4 h-4 ${liked ? 'fill-current' : ''}`} />
-                <span className="text-sm font-medium">{formatNumber(likesCount)}</span>
+                <FontAwesomeIcon icon={liked ? faHeartSolid : faHeartRegular} className={`w-3.5 h-3.5 sm:w-4 sm:h-4`} />
+                <span className="text-xs sm:text-sm font-bold">{formatNumber(likesCount)}</span>
               </button>
 
               <button
@@ -244,48 +232,43 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
                   e.stopPropagation();
                   handleClick();
                 }}
-                className="flex items-center space-x-2 text-gray-500 hover:text-blue-400 transition-colors"
+                className="flex items-center space-x-1.5 sm:space-x-2 text-gray-500 hover:text-white transition-all font-medium"
               >
-                <MessageSquare className="w-4 h-4" />
-                <span className="text-sm font-medium">{formatNumber(post.comments)}</span>
+                <FontAwesomeIcon icon={faComment} className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="text-xs sm:text-sm font-bold">{formatNumber(post.comments)}</span>
               </button>
 
-              <div className="flex items-center space-x-2 text-gray-500">
-                <Eye className="w-4 h-4" />
-                <span className="text-sm font-medium">{formatNumber(post.views)}</span>
+              <div className="flex items-center space-x-1.5 sm:space-x-2 text-gray-500">
+                <FontAwesomeIcon icon={faEye} className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                <span className="text-xs sm:text-sm font-bold">{formatNumber(post.views)}</span>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center space-x-1 sm:space-x-2">
               <button
                 onClick={handleBookmark}
                 disabled={loading}
-                className={`p-2 rounded-xl transition-colors ${
-                  bookmarked
-                    ? 'text-yellow-400 bg-yellow-500/10'
-                    : 'text-gray-500 hover:text-yellow-400 hover:bg-gray-800/50'
-                }`}
+                className={`p-1.5 sm:p-2 rounded-xl transition-all ${bookmarked
+                  ? 'text-white bg-gray-800'
+                  : 'text-gray-500 hover:text-white hover:bg-gray-800/50'
+                  }`}
               >
-                <Bookmark className={`w-4 h-4 ${bookmarked ? 'fill-current' : ''}`} />
+                <FontAwesomeIcon icon={bookmarked ? faBookmarkSolid : faBookmarkRegular} className={`w-3.5 h-3.5 sm:w-4 sm:h-4`} />
               </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Share functionality
-                }}
-                className="p-2 text-gray-500 hover:text-white hover:bg-gray-800/50 rounded-xl transition-colors"
-              >
-                <Share2 className="w-4 h-4" />
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // More menu
-                }}
-                className="p-2 text-gray-500 hover:text-white hover:bg-gray-800/50 rounded-xl transition-colors"
-              >
-                <MoreHorizontal className="w-4 h-4" />
-              </button>
+
+              <ShareMenu
+                url={window.location.origin + `/posts/${post.id}`}
+                title={post.title}
+                sharesCount={sharesCount}
+                onShareSuccess={handleShare}
+              />
+
+              <ManagementMenu
+                isOwner={post.author.id === userProfile?.id}
+                isAdmin={userProfile?.role === 'admin' || userProfile?.role === 'super_admin'}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
             </div>
           </div>
         </div>

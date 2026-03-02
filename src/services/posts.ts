@@ -1,6 +1,6 @@
-// Posts service using Go backend API
+// Posts service using Next.js backend API
 import { apiClient } from '../lib/api';
-import { Post, PostCategory } from '../types';
+import { Post, PostCategory, Category } from '../types';
 
 export interface CreatePostData {
   title: string;
@@ -38,6 +38,8 @@ export interface PostResponse {
   shares: number;
   is_pinned: boolean;
   is_hot: boolean;
+  is_liked?: boolean;
+  is_bookmarked?: boolean;
   media?: Array<{
     id: string;
     type: string;
@@ -94,6 +96,11 @@ class PostsService {
     return apiClient.post<{ message: string }>(`/posts/${postId}/bookmark`);
   }
 
+  // Share post
+  async sharePost(postId: string): Promise<{ message: string; shares: number }> {
+    return apiClient.post<{ message: string; shares: number }>(`/posts/${postId}/share`);
+  }
+
   // Update post
   async updatePost(postId: string, postData: Partial<CreatePostData>): Promise<PostResponse> {
     return apiClient.put<PostResponse>(`/posts/${postId}`, postData);
@@ -102,6 +109,11 @@ class PostsService {
   // Delete post
   async deletePost(postId: string): Promise<{ message: string }> {
     return apiClient.delete<{ message: string }>(`/posts/${postId}`);
+  }
+
+  // Get categories with counts
+  async getCategories(): Promise<Category[]> {
+    return apiClient.get<Category[]>('/posts/categories');
   }
 
   // Upload media
@@ -137,6 +149,9 @@ class PostsService {
       likes: response.likes,
       comments: response.comments,
       views: response.views,
+      shares: response.shares,
+      isLiked: response.is_liked || false,
+      isBookmarked: response.is_bookmarked || false,
       publishedAt: response.published_at || response.created_at,
       isPinned: response.is_pinned,
       isHot: response.is_hot,

@@ -1,6 +1,7 @@
 // Home page with Apple design philosophy
 import React, { useState, useEffect } from 'react';
-import { Home as HomeIcon, ChevronDown, Sparkles, TrendingUp } from 'lucide-react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faHome, faChevronDown, faFire, faChartLine } from '@fortawesome/free-solid-svg-icons';
 import { useNavigate } from 'react-router-dom';
 import PostCard from '../components/PostCard';
 import Sidebar from '../components/Sidebar';
@@ -18,7 +19,7 @@ const HomePage: React.FC = () => {
   const [offset, setOffset] = useState(0);
   const limit = 20;
 
-  const categories: Category[] = [
+  const [categories, setCategories] = useState<Category[]>([
     { id: 'all', name: 'All', count: 0 },
     { id: 'general', name: 'General', count: 0 },
     { id: 'tech', name: 'Tech', count: 0 },
@@ -26,11 +27,23 @@ const HomePage: React.FC = () => {
     { id: 'updates', name: 'Updates', count: 0 },
     { id: 'gists', name: 'Gists', count: 0 },
     { id: 'banter', name: 'Banter', count: 0 },
-  ];
+  ]);
 
   useEffect(() => {
+    loadCategories();
     loadPosts();
   }, [selectedCategory, sortBy]);
+
+  const loadCategories = async () => {
+    try {
+      const data = await postsService.getCategories();
+      if (data && data.length > 0) {
+        setCategories(data);
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  };
 
   const loadPosts = async () => {
     setLoading(true);
@@ -80,9 +93,9 @@ const HomePage: React.FC = () => {
   };
 
   const sortOptions = [
-    { id: 'latest', label: 'Latest', icon: HomeIcon },
-    { id: 'trending', label: 'Trending', icon: TrendingUp },
-    { id: 'hot', label: 'Hot', icon: Sparkles },
+    { id: 'latest', label: 'Latest', icon: faHome },
+    { id: 'trending', label: 'Trending', icon: faChartLine },
+    { id: 'hot', label: 'Hot', icon: faFire },
   ];
 
   return (
@@ -103,7 +116,7 @@ const HomePage: React.FC = () => {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
-              <HomeIcon className="w-5 h-5 text-gray-400" />
+              <FontAwesomeIcon icon={faHome} className="w-5 h-5 text-gray-400" />
               <div>
                 <h2 className="text-2xl font-semibold text-white">
                   {selectedCategory !== 'all'
@@ -125,7 +138,7 @@ const HomePage: React.FC = () => {
                 <span>
                   {sortOptions.find((s) => s.id === sortBy)?.label || 'Sort by'}
                 </span>
-                <ChevronDown className={`w-4 h-4 transition-transform ${showSortMenu ? 'rotate-180' : ''}`} />
+                <FontAwesomeIcon icon={faChevronDown} className={`w-4 h-4 transition-transform ${showSortMenu ? 'rotate-180' : ''}`} />
               </button>
 
               {showSortMenu && (
@@ -140,13 +153,12 @@ const HomePage: React.FC = () => {
                             setSortBy(option.id as any);
                             setShowSortMenu(false);
                           }}
-                          className={`w-full flex items-center space-x-3 px-4 py-3 text-sm transition-colors ${
-                            sortBy === option.id
-                              ? 'bg-gray-800/50 text-white'
-                              : 'text-gray-300 hover:bg-gray-800/30'
-                          }`}
+                          className={`w-full flex items-center space-x-3 px-4 py-3 text-sm transition-colors ${sortBy === option.id
+                            ? 'bg-gray-800/50 text-white'
+                            : 'text-gray-300 hover:bg-gray-800/30'
+                            }`}
                         >
-                          <Icon className="w-4 h-4" />
+                          <FontAwesomeIcon icon={option.icon} className="w-4 h-4" />
                           <span>{option.label}</span>
                         </button>
                       );
@@ -183,7 +195,7 @@ const HomePage: React.FC = () => {
           ) : posts.length === 0 ? (
             <div className="text-center py-16">
               <div className="w-16 h-16 bg-gray-900/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <HomeIcon className="w-8 h-8 text-gray-600" />
+                <FontAwesomeIcon icon={faHome} className="w-8 h-8 text-gray-600" />
               </div>
               <h3 className="text-lg font-semibold text-white mb-2">No posts yet</h3>
               <p className="text-gray-400 text-sm mb-6">
