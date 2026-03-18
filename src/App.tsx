@@ -140,11 +140,7 @@ function AppContent() {
 
           <Route
             path="/"
-            element={
-              <ProtectedRoute>
-                <HomePage />
-              </ProtectedRoute>
-            }
+            element={<HomePage />}
           />
 
           <Route path="*" element={<Navigate to="/" replace />} />
