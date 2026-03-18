@@ -27,6 +27,14 @@ class ApiClient {
     }
   }
 
+  private setRefreshToken(token: string | null) {
+    if (token) {
+      localStorage.setItem('refresh_token', token);
+    } else {
+      localStorage.removeItem('refresh_token');
+    }
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -89,6 +97,9 @@ class ApiClient {
       // If response contains a token, store it
       if (data.token) {
         this.setAuthToken(data.token);
+      }
+      if (data.refreshToken) {
+        this.setRefreshToken(data.refreshToken);
       }
 
       return data;
@@ -196,6 +207,7 @@ class ApiClient {
   // Clear auth token
   clearAuthToken() {
     this.setAuthToken(null);
+    this.setRefreshToken(null);
   }
 }
 

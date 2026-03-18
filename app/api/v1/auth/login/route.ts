@@ -1,20 +1,40 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent } from '@/lib/api-helpers';
+import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent, setAuthCookies } from '@/lib/api-helpers';
 import { getSupabaseAdmin, getSupabaseURL, getSupabaseAnonKey } from '@/lib/supabase';
 import { randomBytes } from 'crypto';
+import { issueEmailOTP, normalizeEmail, verifyOTPCode } from '@/lib/security';
+import { validateLoginPayload } from '@/lib/validation';
 
 export async function POST(req: NextRequest) {
     try {
-        const body = await parseBody<{ email: string; password: string }>(req);
-        if (!body) return errorResponse('Invalid request body');
+        const body = await parseBody<{ email: string; password: string; otpCode?: string }>(req);
+        const validation = validateLoginPayload(body);
+        if (!validation.ok) return errorResponse(validation.error);
 
-        const { email, password } = body;
-        if (!email || !email.includes('@')) return errorResponse('Valid email is required');
-        if (!password?.trim()) return errorResponse('Password is required');
+        const { email, password, otpCode } = validation.data;
 
         const supabase = getSupabaseAdmin();
         const ipAddress = getClientIP(req);
         const userAgent = getUserAgent(req);
+
+        const { data: user, error: userError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('email', email)
+            .single();
+
+        // Check lockout early when user exists
+        if (user) {
+            const { data: existingLockout } = await supabase
+                .from('account_lockouts')
+                .select('*')
+                .eq('user_id', user.id)
+                .single();
+
+            if (existingLockout?.locked_until && new Date(existingLockout.locked_until) > new Date()) {
+                return errorResponse('Account temporarily locked due to multiple failed login attempts', 423);
+            }
+        }
 
         // Verify password with Supabase Auth
         const supabaseURL = getSupabaseURL();
@@ -28,18 +48,12 @@ export async function POST(req: NextRequest) {
 
         if (!authResp.ok) {
             // Record failed login
-            const { data: userRecord } = await supabase
-                .from('users')
-                .select('id')
-                .eq('email', email)
-                .single();
-
-            if (userRecord) {
+            if (user) {
                 // Check / update lockout
                 const { data: lockout } = await supabase
                     .from('account_lockouts')
                     .select('*')
-                    .eq('user_id', userRecord.id)
+                    .eq('user_id', user.id)
                     .single();
 
                 if (lockout) {
@@ -50,10 +64,10 @@ export async function POST(req: NextRequest) {
                     await supabase
                         .from('account_lockouts')
                         .update({ failed_attempts: newAttempts, locked_until: lockedUntil })
-                        .eq('user_id', userRecord.id);
+                        .eq('user_id', user.id);
                 } else {
                     await supabase.from('account_lockouts').insert({
-                        user_id: userRecord.id,
+                        user_id: user.id,
                         failed_attempts: 1,
                         created_at: new Date().toISOString(),
                     });
@@ -61,7 +75,7 @@ export async function POST(req: NextRequest) {
             }
 
             await supabase.from('security_events').insert({
-                user_id: userRecord?.id || null,
+                user_id: user?.id || null,
                 event_type: 'login_attempt',
                 ip_address: ipAddress,
                 user_agent: userAgent,
@@ -76,29 +90,48 @@ export async function POST(req: NextRequest) {
         const authData = await authResp.json();
         const accessToken = authData.access_token;
 
-        // Get user by email
-        const { data: user, error: userError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('email', email)
-            .single();
-
         if (userError || !user) return errorResponse('Invalid credentials', 401);
-
-        // Check lockout
-        const { data: lockout } = await supabase
-            .from('account_lockouts')
-            .select('*')
-            .eq('user_id', user.id)
-            .single();
-
-        if (lockout?.locked_until && new Date(lockout.locked_until) > new Date()) {
-            return errorResponse('Account temporarily locked due to multiple failed login attempts', 423);
-        }
 
         // Check active
         if (!user.is_active) {
             return errorResponse('Account is inactive', 403);
+        }
+
+        const { data: twoFA } = await supabase
+            .from('two_factor_auth')
+            .select('enabled')
+            .eq('user_id', user.id)
+            .single();
+
+        if (twoFA?.enabled) {
+            if (!otpCode) {
+                try {
+                    await issueEmailOTP(supabase, {
+                        userID: user.id,
+                        email,
+                        type: '2fa',
+                        resendAPIKey: process.env.RESEND_API_KEY,
+                        resendFrom: process.env.RESEND_FROM || 'noreply@techbantcommunity.com',
+                        subject: 'Your Login Verification Code',
+                        html: (code) => `<p>Your verification code is: <strong>${code}</strong></p><p>This code expires in 10 minutes.</p>`,
+                    });
+                } catch (otpError) {
+                    console.error('Failed to issue login OTP:', otpError);
+                }
+
+                return errorResponse('Two-factor authentication required', 401);
+            }
+
+            const otpResult = await verifyOTPCode(supabase, {
+                userID: user.id,
+                email,
+                type: '2fa',
+                code: otpCode,
+            });
+
+            if (!otpResult.ok) {
+                return errorResponse(otpResult.reason, 401);
+            }
         }
 
         // Reset failed attempts
@@ -136,7 +169,7 @@ export async function POST(req: NextRequest) {
 
         const permissions = getRolePermissions(user.role);
 
-        return jsonResponse({
+        const response = jsonResponse({
             token: accessToken,
             refreshToken: sessionID,
             expiresIn: 86400,
@@ -144,6 +177,8 @@ export async function POST(req: NextRequest) {
             roles: [user.role],
             permissions,
         });
+
+        return setAuthCookies(response, accessToken, sessionID);
     } catch (error: unknown) {
         console.error('Login error:', error);
         return errorResponse('Internal server error', 500);

@@ -14,6 +14,7 @@ export interface AuthResponse {
 export interface LoginRequest {
   email: string;
   password: string;
+  otpCode?: string;
 }
 
 export interface SignupRequest {
@@ -28,6 +29,26 @@ export interface ChangePasswordRequest {
 }
 
 class AuthService {
+  private readonly apiBaseURL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
+
+  private setRefreshToken(token: string | null) {
+    if (token) {
+      localStorage.setItem('refresh_token', token);
+    } else {
+      localStorage.removeItem('refresh_token');
+    }
+  }
+
+  private getRefreshTokenValue(): string | null {
+    return localStorage.getItem('refresh_token');
+  }
+
+  private persistAuthResponse(response: AuthResponse): AuthResponse {
+    localStorage.setItem('auth_token', response.token);
+    this.setRefreshToken(response.refreshToken);
+    return response;
+  }
+
   // Sign up new user
   async signup(data: SignupRequest): Promise<AuthResponse> {
     try {
@@ -36,7 +57,7 @@ class AuthService {
         password: data.password,
         name: data.name,
       });
-      return response;
+      return this.persistAuthResponse(response);
     } catch (error: any) {
       console.error('Signup error:', error);
       throw new Error(error.message || 'Failed to sign up');
@@ -49,8 +70,9 @@ class AuthService {
       const response = await apiClient.post<AuthResponse>('/auth/login', {
         email: data.email,
         password: data.password,
+        otpCode: data.otpCode,
       });
-      return response;
+      return this.persistAuthResponse(response);
     } catch (error: any) {
       console.error('Login error:', error);
       throw new Error(error.message || 'Invalid credentials');
@@ -60,9 +82,17 @@ class AuthService {
   // Google OAuth login
   async loginWithGoogle(): Promise<void> {
     try {
-      // Redirect to backend OAuth endpoint
       const redirectUrl = encodeURIComponent(window.location.origin + '/oauth-callback');
-      window.location.href = `${import.meta.env.VITE_API_BASE_URL || ''}/api/v1/auth/oauth/google?redirect_url=${redirectUrl}`;
+      const response = await fetch(`${this.apiBaseURL}/auth/oauth/google?redirect_url=${redirectUrl}`, {
+        credentials: 'include',
+      });
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data?.auth_url) {
+        throw new Error(data?.error || 'Failed to start Google OAuth');
+      }
+
+      window.location.href = data.auth_url;
     } catch (error: any) {
       console.error('Google login error:', error);
       throw new Error(error.message || 'Failed to sign in with Google');
@@ -71,8 +101,9 @@ class AuthService {
 
   // Logout
   async logout(): Promise<void> {
+    const refreshToken = this.getRefreshTokenValue();
     try {
-      await apiClient.post('/auth/logout');
+      await apiClient.post('/auth/logout', refreshToken ? { refreshToken } : undefined);
       apiClient.clearAuthToken();
     } catch (error) {
       console.error('Logout error:', error);
@@ -121,13 +152,24 @@ class AuthService {
 
   // Get current user from token
   async getCurrentUser(): Promise<User | null> {
-    try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return null;
+    const token = localStorage.getItem('auth_token');
+    const refreshToken = this.getRefreshTokenValue();
+    if (!token && !refreshToken) return null;
 
+    try {
       const response = await apiClient.get<{ user: User }>('/auth/verify');
       return response.user;
-    } catch (error) {
+    } catch (error: any) {
+      if (refreshToken) {
+        try {
+          await this.refreshStoredSession();
+          const response = await apiClient.get<{ user: User }>('/auth/verify');
+          return response.user;
+        } catch (refreshError) {
+          console.error('Session refresh failed:', refreshError);
+          this.clearStoredSession();
+        }
+      }
       console.error('Get current user error:', error);
       return null;
     }
@@ -144,16 +186,25 @@ class AuthService {
       const response = await apiClient.post<AuthResponse>('/auth/refresh', {
         refreshToken,
       });
-      return response;
+      return this.persistAuthResponse(response);
     } catch (error: any) {
       console.error('Refresh token error:', error);
       throw new Error(error.message || 'Failed to refresh token');
     }
   }
 
+  async refreshStoredSession(): Promise<AuthResponse> {
+    const refreshToken = this.getRefreshTokenValue();
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+
+    return this.refreshToken(refreshToken);
+  }
+
   // Check if user is authenticated
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('auth_token');
+    return !!localStorage.getItem('auth_token') || !!this.getRefreshTokenValue();
   }
 
   // Get stored token
@@ -164,6 +215,14 @@ class AuthService {
   // Set token (used by OAuth callback)
   setToken(token: string) {
     localStorage.setItem('auth_token', token);
+  }
+
+  setRefreshSession(refreshToken: string) {
+    this.setRefreshToken(refreshToken);
+  }
+
+  clearStoredSession() {
+    apiClient.clearAuthToken();
   }
 }
 

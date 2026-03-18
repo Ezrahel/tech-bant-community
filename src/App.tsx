@@ -14,6 +14,7 @@ import AdminDashboard from './views/AdminDashboard';
 import UserProfilePage from './views/UserProfilePage';
 import OAuthCallbackPage from './views/OAuthCallbackPage';
 import PostDetailPage from './views/PostDetailPage';
+import ForgotPasswordPage from './views/ForgotPasswordPage';
 
 function ProtectedRoute({
   children,
@@ -50,7 +51,7 @@ function ProtectedRoute({
 function AppContent() {
   const location = useLocation();
   const [searchQuery, setSearchQuery] = useState('');
-  const hideHeaderRoutes = ['/login', '/signup', '/oauth-callback'];
+  const hideHeaderRoutes = ['/login', '/signup', '/oauth-callback', '/forgot-password'];
   const shouldShowHeader = !hideHeaderRoutes.includes(location.pathname);
 
   return (
@@ -62,6 +63,7 @@ function AppContent() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/oauth-callback" element={<OAuthCallbackPage />} />
 
           <Route

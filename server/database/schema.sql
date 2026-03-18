@@ -176,9 +176,16 @@ CREATE TABLE IF NOT EXISTS public.reports (
     comment_id UUID REFERENCES public.comments(id) ON DELETE CASCADE,
     reason TEXT NOT NULL,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'reviewed', 'resolved', 'dismissed')),
+    snapshot JSONB,
+    admin_notes TEXT,
+    resolution_summary TEXT,
+    reporter_notified_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
     reviewed_at TIMESTAMPTZ,
     reviewed_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMPTZ,
+    resolved_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
     CHECK ((post_id IS NOT NULL AND comment_id IS NULL) OR (post_id IS NULL AND comment_id IS NOT NULL))
 );
 
@@ -326,4 +333,3 @@ CREATE TRIGGER update_posts_updated_at BEFORE UPDATE ON public.posts
 DROP TRIGGER IF EXISTS update_comments_updated_at ON public.comments;
 CREATE TRIGGER update_comments_updated_at BEFORE UPDATE ON public.comments
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-

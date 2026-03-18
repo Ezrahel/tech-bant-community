@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, paginationParams } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { PUBLIC_USER_COLUMNS, sanitizeUserContent } from '@/lib/security';
 
 // GET /posts/[id]/comments
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -11,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         const { data: comments, error } = await supabase
             .from('comments')
-            .select('*, author:users!author_id(id, name, email, avatar, is_admin, is_verified)')
+            .select(`*, author:users!author_id(${PUBLIC_USER_COLUMNS})`)
             .eq('post_id', postId)
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
@@ -45,25 +46,23 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         const { user } = authResult;
 
         const body = await parseBody<{ content: string; parent_id?: string }>(req);
-        if (!body?.content?.trim()) return errorResponse('Content is required');
+        const content = sanitizeUserContent(body?.content || '');
+        if (!content) return errorResponse('Content is required');
 
         const supabase = getSupabaseAdmin();
         const now = new Date().toISOString();
-
-        // Sanitize content (basic)
-        const content = body.content.trim().replace(/<[^>]*>/g, '');
 
         const { data: comment, error } = await supabase
             .from('comments')
             .insert({
                 post_id: postId,
                 author_id: user.id,
-                parent_id: body.parent_id || null,
+                parent_id: body?.parent_id || null,
                 content,
                 created_at: now,
                 updated_at: now,
             })
-            .select('*, author:users!author_id(id, name, email, avatar, is_admin, is_verified)')
+            .select(`*, author:users!author_id(${PUBLIC_USER_COLUMNS})`)
             .single();
 
         if (error) return errorResponse('Failed to create comment', 500);

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from './supabase';
 
+export const ACCESS_TOKEN_COOKIE = 'tbc_access_token';
+export const REFRESH_TOKEN_COOKIE = 'tbc_refresh_token';
+
 // ---- JSON response helpers ----
 
 export function jsonResponse(data: unknown, status = 200) {
@@ -9,6 +12,32 @@ export function jsonResponse(data: unknown, status = 200) {
 
 export function errorResponse(message: string, status = 400) {
     return NextResponse.json({ error: message }, { status });
+}
+
+function cookieConfig(maxAgeSeconds: number) {
+    return {
+        httpOnly: true,
+        sameSite: 'lax' as const,
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: maxAgeSeconds,
+    };
+}
+
+export function setAuthCookies(response: NextResponse, accessToken: string, refreshToken?: string) {
+    response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, cookieConfig(60 * 60));
+
+    if (refreshToken) {
+        response.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, cookieConfig(60 * 60 * 24));
+    }
+
+    return response;
+}
+
+export function clearAuthCookies(response: NextResponse) {
+    response.cookies.set(ACCESS_TOKEN_COOKIE, '', { ...cookieConfig(0), maxAge: 0 });
+    response.cookies.set(REFRESH_TOKEN_COOKIE, '', { ...cookieConfig(0), maxAge: 0 });
+    return response;
 }
 
 // ---- Auth helpers ----
@@ -25,9 +54,9 @@ export interface AuthUser {
  */
 export async function getUserFromRequest(req: NextRequest): Promise<AuthUser | null> {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) return null;
-
-    const token = authHeader.slice(7);
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const cookieToken = req.cookies.get(ACCESS_TOKEN_COOKIE)?.value || null;
+    const token = bearerToken || cookieToken;
     if (!token) return null;
 
     try {

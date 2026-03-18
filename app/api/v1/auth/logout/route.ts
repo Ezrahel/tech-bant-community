@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody, withAuth, getClientIP, getUserAgent } from '@/lib/api-helpers';
+import { clearAuthCookies, jsonResponse, errorResponse, parseBody, withAuth, getClientIP, getUserAgent, REFRESH_TOKEN_COOKIE } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
 export async function POST(req: NextRequest) {
@@ -12,11 +12,12 @@ export async function POST(req: NextRequest) {
         const body = await parseBody<{ refreshToken?: string }>(req);
 
         // Invalidate session
-        if (body?.refreshToken) {
+        const refreshToken = body?.refreshToken || req.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
+        if (refreshToken) {
             await supabase
                 .from('sessions')
                 .update({ is_active: false })
-                .eq('id', body.refreshToken)
+                .eq('id', refreshToken)
                 .eq('user_id', user.id);
         }
 
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
             created_at: new Date().toISOString(),
         });
 
-        return jsonResponse({ message: 'Logged out successfully' });
+        return clearAuthCookies(jsonResponse({ message: 'Logged out successfully' }));
     } catch (error: unknown) {
         console.error('Logout error:', error);
         return errorResponse('Internal server error', 500);

@@ -1,52 +1,45 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody } from '@/lib/api-helpers';
+import { jsonResponse, errorResponse, parseBody, withAuth } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { createHash } from 'crypto';
+import { verifyOTPCode } from '@/lib/security';
 
 export async function POST(req: NextRequest) {
     try {
-        const body = await parseBody<{ code: string; email?: string }>(req);
+        const authResult = await withAuth(req);
+        if (authResult instanceof Response) return authResult;
+        const { user } = authResult;
+
+        const body = await parseBody<{ code: string }>(req);
         if (!body?.code) return errorResponse('Code is required');
 
         const supabase = getSupabaseAdmin();
+        const { data: profile } = await supabase
+            .from('users')
+            .select('email')
+            .eq('id', user.id)
+            .single();
 
-        // Find latest unused OTP for 2FA
-        const query = supabase
-            .from('otps')
-            .select('*')
-            .eq('type', '2fa')
-            .eq('used', false)
-            .order('created_at', { ascending: false })
-            .limit(1);
-
-        if (body.email) {
-            query.eq('email', body.email);
+        if (!profile?.email) {
+            return errorResponse('User not found', 404);
         }
 
-        const { data: otp } = await query.single();
+        const otpResult = await verifyOTPCode(supabase, {
+            userID: user.id,
+            email: profile.email,
+            type: '2fa',
+            code: body.code.trim(),
+        });
 
-        if (!otp) return errorResponse('Invalid or expired code', 400);
-
-        if (new Date(otp.expires_at) < new Date()) {
-            await supabase.from('otps').update({ used: true }).eq('id', otp.id);
-            return errorResponse('Code expired', 400);
+        if (!otpResult.ok) {
+            return errorResponse(otpResult.reason, 400);
         }
 
-        if (otp.attempts >= 5) {
-            await supabase.from('otps').update({ used: true }).eq('id', otp.id);
-            return errorResponse('Too many attempts', 400);
-        }
-
-        const hashedInput = createHash('sha256').update(body.code).digest('hex');
-        if (hashedInput !== otp.code) {
-            await supabase
-                .from('otps')
-                .update({ attempts: (otp.attempts || 0) + 1 })
-                .eq('id', otp.id);
-            return errorResponse('Invalid code', 400);
-        }
-
-        await supabase.from('otps').update({ used: true }).eq('id', otp.id);
+        await supabase.from('two_factor_auth').upsert({
+            user_id: user.id,
+            enabled: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+        });
 
         return jsonResponse({ message: 'OTP verified successfully' });
     } catch (error: unknown) {

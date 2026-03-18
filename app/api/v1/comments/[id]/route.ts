@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { PUBLIC_USER_COLUMNS, sanitizeUserContent } from '@/lib/security';
 
 // PUT /comments/[id]
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,15 +24,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         if (existing.author_id !== user.id) return errorResponse('Unauthorized', 403);
 
         const body = await parseBody<{ content: string }>(req);
-        if (!body?.content?.trim()) return errorResponse('Content is required');
-
-        const content = body.content.trim().replace(/<[^>]*>/g, '');
+        const content = sanitizeUserContent(body?.content || '');
+        if (!content) return errorResponse('Content is required');
 
         const { data: comment, error } = await supabase
             .from('comments')
             .update({ content, updated_at: new Date().toISOString() })
             .eq('id', commentId)
-            .select('*, author:users!author_id(id, name, email, avatar, is_admin, is_verified)')
+            .select(`*, author:users!author_id(${PUBLIC_USER_COLUMNS})`)
             .single();
 
         if (error) return errorResponse('Failed to update comment', 500);

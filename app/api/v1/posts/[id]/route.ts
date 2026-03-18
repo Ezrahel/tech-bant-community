@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, getUserFromRequest } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/lib/security';
 
 // GET /posts/[id]
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -12,7 +13,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             .from('posts')
             .select(`
                 *,
-                author:users!author_id(id, name, email, avatar, is_admin, is_verified),
+                author:users!author_id(${PUBLIC_USER_COLUMNS}),
                 media:media(id, type, url, name, size)
             `)
             .eq('id', id)
@@ -85,17 +86,36 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         if (!body) return errorResponse('Invalid request body');
 
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-        if (body.title) updates.title = body.title;
-        if (body.content) updates.content = body.content;
-        if (body.category) updates.category = body.category;
-        if (body.tags) updates.tags = body.tags;
-        if (body.location) updates.location = body.location;
+        if (body.title !== undefined) {
+            const title = sanitizePlainText(body.title, 200);
+            if (!title) return errorResponse('Title is required');
+            updates.title = title;
+        }
+        if (body.content !== undefined) {
+            const content = sanitizeUserContent(body.content);
+            if (!content) return errorResponse('Content is required');
+            updates.content = content;
+        }
+        if (body.category !== undefined) {
+            const category = sanitizePlainText(body.category, 50);
+            if (!category) return errorResponse('Category is required');
+            updates.category = category;
+        }
+        if (body.tags) {
+            updates.tags = body.tags
+                .map((tag) => sanitizePlainText(tag, 50))
+                .filter(Boolean)
+                .slice(0, 10);
+        }
+        if (body.location !== undefined) {
+            updates.location = body.location ? sanitizePlainText(body.location, 100) : null;
+        }
 
         const { data: post, error } = await supabase
             .from('posts')
             .update(updates)
             .eq('id', id)
-            .select('*, author:users!author_id(id, name, email, avatar, is_admin, is_verified)')
+            .select(`*, author:users!author_id(${PUBLIC_USER_COLUMNS})`)
             .single();
 
         if (error) return errorResponse('Failed to update post', 500);

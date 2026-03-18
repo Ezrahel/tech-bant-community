@@ -1,5 +1,7 @@
 # Tech Bant Community - Backend API
 
+> Status: legacy reference backend. The canonical active backend for this repository is the Next.js API under `/app/api`.
+
 A high-performance Go backend for the Tech Bant Community platform, built with Supabase (PostgreSQL, Authentication, and Storage).
 
 ## Architecture
@@ -195,4 +197,3 @@ server/
 ## License
 
 Proprietary - Tech Bant Community
-

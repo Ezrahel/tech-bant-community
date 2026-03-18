@@ -27,8 +27,8 @@ export interface PostResponse {
     name: string;
     email?: string;
     avatar: string;
-    isAdmin: boolean;
-    isVerified: boolean;
+    is_admin: boolean;
+    is_verified: boolean;
   };
   category: string;
   tags: string[];
@@ -141,8 +141,8 @@ class PostsService {
         name: response.author.name,
         email: response.author.email,
         avatar: response.author.avatar,
-        isAdmin: response.author.isAdmin,
-        isVerified: response.author.isVerified,
+        isAdmin: response.author.is_admin,
+        isVerified: response.author.is_verified,
       },
       category: response.category as Post['category'],
       tags: response.tags,

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { sanitizePlainText, validateAvatarURL, validateWebsiteURL } from '@/lib/security';
 
 // GET /users/me
 export async function GET(req: NextRequest) {
@@ -55,23 +56,31 @@ export async function PUT(req: NextRequest) {
         const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
         if (body.name) {
-            const name = body.name.trim().replace(/<[^>]*>/g, '');
+            const name = sanitizePlainText(body.name, 100);
             if (name.length < 1 || name.length > 100) return errorResponse('Name must be 1-100 characters');
             updates.name = name;
         }
         if (body.bio !== undefined) {
-            const bio = body.bio.trim().replace(/<[^>]*>/g, '');
+            const bio = sanitizePlainText(body.bio, 500);
             if (bio.length > 500) return errorResponse('Bio must be less than 500 characters');
             updates.bio = bio;
         }
         if (body.location !== undefined) {
-            updates.location = body.location.trim().replace(/<[^>]*>/g, '').slice(0, 100);
+            updates.location = sanitizePlainText(body.location, 100);
         }
         if (body.website !== undefined) {
-            updates.website = body.website;
+            const website = validateWebsiteURL(body.website);
+            if (body.website.trim() && !website) {
+                return errorResponse('Website must be a valid http or https URL');
+            }
+            updates.website = website;
         }
         if (body.avatar !== undefined) {
-            updates.avatar = body.avatar;
+            const avatar = validateAvatarURL(body.avatar);
+            if (body.avatar.trim() && !avatar) {
+                return errorResponse('Avatar must be a valid https URL');
+            }
+            updates.avatar = avatar;
         }
 
         const supabase = getSupabaseAdmin();

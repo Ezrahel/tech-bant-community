@@ -27,7 +27,7 @@ export interface UserResponse {
   website?: string;
   is_admin: boolean;
   is_verified: boolean;
-  is_active: boolean;
+  is_active?: boolean;
   role?: string;
   provider?: string;
   posts_count?: number;

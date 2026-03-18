@@ -49,6 +49,7 @@ export const samplePosts: Post[] = [
     likes: 234,
     comments: 67,
     views: 1240,
+    shares: 12,
     publishedAt: '2h',
     isHot: true
   },
@@ -62,6 +63,7 @@ export const samplePosts: Post[] = [
     likes: 156,
     comments: 43,
     views: 890,
+    shares: 9,
     publishedAt: '4h',
     isPinned: true
   },
@@ -75,6 +77,7 @@ export const samplePosts: Post[] = [
     likes: 89,
     comments: 23,
     views: 567,
+    shares: 4,
     publishedAt: '6h'
   },
   {
@@ -87,6 +90,7 @@ export const samplePosts: Post[] = [
     likes: 45,
     comments: 128,
     views: 2340,
+    shares: 18,
     publishedAt: '8h'
   },
   {
@@ -99,6 +103,7 @@ export const samplePosts: Post[] = [
     likes: 178,
     comments: 56,
     views: 1450,
+    shares: 14,
     publishedAt: '12h'
   }
 ];

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, withAuth } from '@/lib/api-helpers';
 import { getSupabaseAdmin, getSupabaseURL, getSupabaseServiceKey, getStorageBucket } from '@/lib/supabase';
+import { buildSafeObjectPath, getUploadConstraints } from '@/lib/security';
 
 // POST /media/upload
 export async function POST(req: NextRequest) {
@@ -12,19 +13,24 @@ export async function POST(req: NextRequest) {
         const formData = await req.formData();
         const file = formData.get('file') as File;
         if (!file) return errorResponse('File is required');
+        if (!file.type) return errorResponse('File type is required');
 
         const supabase = getSupabaseAdmin();
         const supabaseURL = getSupabaseURL();
         const serviceKey = getSupabaseServiceKey();
         const bucket = getStorageBucket();
 
-        // Determine media type
-        let mediaType = 'image';
-        if (file.type.startsWith('video')) mediaType = 'video';
+        const constraints = getUploadConstraints(file.type);
+        if (!constraints) {
+            return errorResponse('Unsupported file type', 415);
+        }
+        if (file.size > constraints.maxBytes) {
+            return errorResponse(`File exceeds maximum allowed size of ${constraints.maxBytes} bytes`, 413);
+        }
 
         // Generate unique path
         const mediaId = crypto.randomUUID();
-        const objectPath = `${mediaId}/${file.name}`;
+        const objectPath = buildSafeObjectPath(mediaId, file.type);
 
         // Upload to Supabase Storage via HTTP
         const fileBuffer = await file.arrayBuffer();
@@ -53,7 +59,8 @@ export async function POST(req: NextRequest) {
                 id: mediaId,
                 user_id: user.id,
                 url: publicURL,
-                type: mediaType,
+                type: constraints.mediaType,
+                name: objectPath.split('/').pop(),
                 size: file.size,
                 created_at: now,
             })

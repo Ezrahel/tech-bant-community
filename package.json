@@ -7,7 +7,9 @@
     "dev": "vite",
     "next-dev": "next dev",
     "build": "vite build",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint .",
+    "test": "rm -rf .tmp-tests && tsc -p tsconfig.tests.json && node --test --experimental-specifier-resolution=node .tmp-tests/tests/*.test.js && rm -rf .tmp-tests",
     "preview": "vite preview"
   },
   "dependencies": {

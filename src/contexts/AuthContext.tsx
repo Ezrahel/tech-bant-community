@@ -35,7 +35,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     // Listen for storage changes (e.g., token updates from other tabs)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'auth_token') {
+      if (e.key === 'auth_token' || e.key === 'refresh_token') {
         loadUser();
       }
     };
@@ -64,7 +64,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null);
       setUserProfile(null);
       // Clear invalid token
-      authService.setToken('');
+      authService.clearStoredSession();
     } finally {
       setLoading(false);
     }

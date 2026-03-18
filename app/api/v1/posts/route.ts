@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, paginationParams, getUserFromRequest } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { createHash } from 'crypto';
+import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/lib/security';
 
 // GET /posts - List posts (with optional category filter)
 export async function GET(req: NextRequest) {
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
             .from('posts')
             .select(`
                 *,
-                author:users!author_id(id, name, email, avatar, is_admin, is_verified),
+                author:users!author_id(${PUBLIC_USER_COLUMNS}),
                 media:media(id, type, url, name, size)
             `)
             .order('created_at', { ascending: false })
@@ -77,10 +78,19 @@ export async function POST(req: NextRequest) {
         }>(req);
         if (!body) return errorResponse('Invalid request body');
 
-        const { title, content, category, tags, location, mediaIds } = body;
-        if (!title?.trim()) return errorResponse('Title is required');
-        if (!content?.trim()) return errorResponse('Content is required');
-        if (!category?.trim()) return errorResponse('Category is required');
+        const title = sanitizePlainText(body.title || '', 200);
+        const content = sanitizeUserContent(body.content || '');
+        const category = sanitizePlainText(body.category || '', 50);
+        const tags = (body.tags || [])
+            .map((tag) => sanitizePlainText(tag, 50))
+            .filter(Boolean)
+            .slice(0, 10);
+        const location = body.location ? sanitizePlainText(body.location, 100) : null;
+        const mediaIDs = body.mediaIds || [];
+
+        if (!title) return errorResponse('Title is required');
+        if (!content) return errorResponse('Content is required');
+        if (!category) return errorResponse('Category is required');
 
         const supabase = getSupabaseAdmin();
 
@@ -109,30 +119,30 @@ export async function POST(req: NextRequest) {
                 content,
                 author_id: user.id,
                 category,
-                tags: tags || [],
+                tags,
                 likes: 0,
                 comments: 0,
                 views: 0,
                 shares: 0,
                 is_pinned: false,
                 is_hot: false,
-                location: location || null,
+                location,
                 content_hash: contentHash,
                 published_at: now,
                 created_at: now,
                 updated_at: now,
             })
-            .select('*, author:users!author_id(id, name, email, avatar, is_admin, is_verified)')
+            .select(`*, author:users!author_id(${PUBLIC_USER_COLUMNS})`)
             .single();
 
         if (error) return errorResponse('Failed to create post', 500);
 
         // Link media if provided
-        if (mediaIds && mediaIds.length > 0) {
+        if (mediaIDs.length > 0) {
             const { error: mediaError } = await supabase
                 .from('media')
                 .update({ post_id: post.id })
-                .in('id', mediaIds)
+                .in('id', mediaIDs)
                 .eq('user_id', user.id);
 
             if (mediaError) {

@@ -16,11 +16,13 @@ const OAuthCallbackPage: React.FC = () => {
     const hash = window.location.hash.substring(1);
     const params = new URLSearchParams(hash);
     const token = params.get('token');
+    const refreshToken = params.get('refreshToken');
     const errorParam = params.get('error');
 
     // Also check query params as fallback
     const queryToken = searchParams.get('token');
     const queryError = searchParams.get('error');
+    const oauthSuccess = searchParams.get('oauth') === 'success';
 
     const finalToken = token || queryToken;
     const finalError = errorParam || queryError;
@@ -34,8 +36,18 @@ const OAuthCallbackPage: React.FC = () => {
     if (finalToken) {
       // Store token using authService
       authService.setToken(finalToken);
+      if (refreshToken) {
+        authService.setRefreshSession(refreshToken);
+      }
       refreshUserProfile();
       navigate('/', { replace: true });
+    } else if (oauthSuccess) {
+      refreshUserProfile()
+        .then(() => navigate('/', { replace: true }))
+        .catch(() => {
+          setError('OAuth session could not be established');
+          setTimeout(() => navigate('/login'), 3000);
+        });
     } else {
       setError('No token received');
       setTimeout(() => navigate('/login'), 3000);

@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent } from '@/lib/api-helpers';
+import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent, REFRESH_TOKEN_COOKIE, setAuthCookies } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { randomBytes } from 'crypto';
 
 export async function POST(req: NextRequest) {
     try {
-        const body = await parseBody<{ refreshToken: string }>(req);
-        if (!body?.refreshToken) return errorResponse('Refresh token is required');
+        const body = await parseBody<{ refreshToken?: string }>(req);
+        const refreshToken = body?.refreshToken || req.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
+        if (!refreshToken) return errorResponse('Refresh token is required');
 
         const supabase = getSupabaseAdmin();
         const ipAddress = getClientIP(req);
@@ -16,7 +17,7 @@ export async function POST(req: NextRequest) {
         const { data: session, error } = await supabase
             .from('sessions')
             .select('user_id, token_id, expires_at')
-            .eq('id', body.refreshToken)
+            .eq('id', refreshToken)
             .eq('is_active', true)
             .single();
 
@@ -56,11 +57,11 @@ export async function POST(req: NextRequest) {
         await supabase
             .from('sessions')
             .update({ is_active: false })
-            .eq('id', body.refreshToken);
+            .eq('id', refreshToken);
 
         const permissions = getRolePermissions(user.role);
 
-        return jsonResponse({
+        const response = jsonResponse({
             token: session.token_id,
             refreshToken: sessionID,
             expiresIn: 86400,
@@ -68,6 +69,8 @@ export async function POST(req: NextRequest) {
             roles: [user.role],
             permissions,
         });
+
+        return setAuthCookies(response, session.token_id, sessionID);
     } catch (error: unknown) {
         console.error('Refresh error:', error);
         return errorResponse('Internal server error', 500);

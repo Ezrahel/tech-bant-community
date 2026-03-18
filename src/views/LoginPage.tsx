@@ -45,9 +45,7 @@ const LoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      // Verify OTP with backend
-      // This would typically involve getting a token from the login response
-      await authService.login({ email, password });
+      await authService.login({ email, password, otpCode });
       await refreshUserProfile();
       navigate(from, { replace: true });
     } catch (err: any) {

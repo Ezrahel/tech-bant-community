@@ -1,19 +1,17 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent } from '@/lib/api-helpers';
+import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent, setAuthCookies } from '@/lib/api-helpers';
 import { getSupabaseAdmin, getSupabaseURL, getSupabaseAnonKey } from '@/lib/supabase';
 import { randomBytes } from 'crypto';
+import { normalizeEmail, sanitizePlainText } from '@/lib/security';
+import { validateSignupPayload } from '@/lib/validation';
 
 export async function POST(req: NextRequest) {
     try {
         const body = await parseBody<{ email: string; password: string; name: string }>(req);
-        if (!body) return errorResponse('Invalid request body');
+        const validation = validateSignupPayload(body);
+        if (!validation.ok) return errorResponse(validation.error);
 
-        const { email, password, name } = body;
-
-        // Validate input
-        if (!email || !email.includes('@')) return errorResponse('Valid email is required');
-        if (!password || password.length < 8) return errorResponse('Password must be at least 8 characters');
-        if (!name?.trim()) return errorResponse('Name is required');
+        const { email, password, name } = validation.data;
 
         const supabase = getSupabaseAdmin();
         const ipAddress = getClientIP(req);
@@ -70,7 +68,7 @@ export async function POST(req: NextRequest) {
             .from('users')
             .insert({
                 id: userID,
-                name: name.trim(),
+                name,
                 email,
                 avatar,
                 is_admin: false,
@@ -123,7 +121,7 @@ export async function POST(req: NextRequest) {
             .eq('id', userID)
             .single();
 
-        return jsonResponse({
+        const response = jsonResponse({
             token: accessToken,
             refreshToken: sessionID,
             expiresIn: 86400,
@@ -131,6 +129,8 @@ export async function POST(req: NextRequest) {
             roles: [user?.role || 'user'],
             permissions: getRolePermissions(user?.role || 'user'),
         }, 201);
+
+        return setAuthCookies(response, accessToken, sessionID);
     } catch (error: unknown) {
         console.error('Signup error:', error);
         return errorResponse('Internal server error', 500);

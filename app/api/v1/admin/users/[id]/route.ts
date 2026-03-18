@@ -6,7 +6,7 @@ import { getSupabaseAdmin, getSupabaseURL, getSupabaseServiceKey } from '@/lib/s
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id: targetId } = await params;
-        const authResult = await withAdmin(req);
+        const authResult = await withSuperAdmin(req);
         if (authResult instanceof Response) return authResult;
 
         const body = await parseBody<{ role?: string; is_active?: boolean }>(req);

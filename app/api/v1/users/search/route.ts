@@ -1,12 +1,13 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { PUBLIC_USER_COLUMNS, sanitizeSearchQuery } from '@/lib/security';
 
 // GET /users/search?q=...&limit=...
 export async function GET(req: NextRequest) {
     try {
         const url = new URL(req.url);
-        const query = url.searchParams.get('q') || '';
+        const query = sanitizeSearchQuery(url.searchParams.get('q') || '');
         let limit = parseInt(url.searchParams.get('limit') || '10');
         if (limit <= 0) limit = 10;
         if (limit > 100) limit = 100;
@@ -16,8 +17,8 @@ export async function GET(req: NextRequest) {
         const supabase = getSupabaseAdmin();
         const { data: users, error } = await supabase
             .from('users')
-            .select('*')
-            .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
+            .select(PUBLIC_USER_COLUMNS)
+            .ilike('name', `%${query}%`)
             .order('name')
             .limit(limit);
 

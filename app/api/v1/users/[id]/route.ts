@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { PUBLIC_USER_COLUMNS } from '@/lib/security';
 
 // GET /users/[id]
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -8,7 +9,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const { id } = await params;
         const supabase = getSupabaseAdmin();
 
-        const { data: user, error } = await supabase.from('users').select('*').eq('id', id).single();
+        const { data: user, error } = await supabase
+            .from('users')
+            .select(PUBLIC_USER_COLUMNS)
+            .eq('id', id)
+            .single();
         if (error || !user) return errorResponse('User not found', 404);
 
         // Actual posts count

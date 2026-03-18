@@ -298,10 +298,9 @@ const PostDetailPage: React.FC = () => {
         ) : (
           <>
             <h1 className="text-xl sm:text-3xl font-bold text-white mb-3 sm:mb-4 leading-tight">{post.title}</h1>
-            <div
-              className="prose prose-invert max-w-none mb-6 text-gray-300 leading-relaxed text-sm sm:text-base"
-              dangerouslySetInnerHTML={{ __html: post.content }}
-            />
+            <div className="prose prose-invert max-w-none mb-6 text-gray-300 leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words">
+              {post.content}
+            </div>
           </>
         )}
 
@@ -516,4 +515,3 @@ const PostDetailPage: React.FC = () => {
 };
 
 export default PostDetailPage;
-

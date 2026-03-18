@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const followingIds = follows.map((f) => f.following_id);
         const { data: users } = await supabase
             .from('users')
-            .select('id, name, email, avatar, is_admin, is_verified')
+            .select('id, name, avatar, is_admin, is_verified')
             .in('id', followingIds);
 
         return jsonResponse(users || []);

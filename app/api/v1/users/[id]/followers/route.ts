@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, withAuth } from '@/lib/api-helpers';
+import { jsonResponse, errorResponse } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
 // GET /users/[id]/followers
@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const followerIds = follows.map((f) => f.follower_id);
         const { data: users } = await supabase
             .from('users')
-            .select('id, name, email, avatar, is_admin, is_verified')
+            .select('id, name, avatar, is_admin, is_verified')
             .in('id', followerIds);
 
         return jsonResponse(users || []);

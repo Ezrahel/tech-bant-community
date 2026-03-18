@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { errorResponse } from '@/lib/api-helpers';
+import { errorResponse, setAuthCookies } from '@/lib/api-helpers';
 import { getSupabaseAdmin, getSupabaseURL, getSupabaseAnonKey } from '@/lib/supabase';
 import { randomBytes } from 'crypto';
 
@@ -16,26 +16,27 @@ export async function GET(req: NextRequest) {
 
         const supabase = getSupabaseAdmin();
 
-        // Verify state if provided
-        let redirectURL = url.origin;
-        if (state) {
-            const { data: oauthState } = await supabase
-                .from('oauth_states')
-                .select('*')
-                .eq('state', state)
-                .single();
-
-            if (oauthState) {
-                // Check expiry
-                if (new Date(oauthState.expires_at) < new Date()) {
-                    await supabase.from('oauth_states').delete().eq('state', state);
-                    return errorResponse('OAuth state expired', 400);
-                }
-                redirectURL = oauthState.redirect_url || url.origin;
-                // Delete used state
-                await supabase.from('oauth_states').delete().eq('state', state);
-            }
+        if (!state) {
+            return errorResponse('Missing OAuth state', 400);
         }
+
+        const { data: oauthState } = await supabase
+            .from('oauth_states')
+            .select('*')
+            .eq('state', state)
+            .single();
+
+        if (!oauthState) {
+            return errorResponse('Invalid OAuth state', 400);
+        }
+
+        if (new Date(oauthState.expires_at) < new Date()) {
+            await supabase.from('oauth_states').delete().eq('state', state);
+            return errorResponse('OAuth state expired', 400);
+        }
+
+        const redirectURL = oauthState.redirect_url || url.origin;
+        await supabase.from('oauth_states').delete().eq('state', state);
 
         // Exchange code for session via Supabase Auth
         const supabaseURL = getSupabaseURL();
@@ -140,8 +141,8 @@ export async function GET(req: NextRequest) {
         });
 
         // Redirect to frontend with token in fragment (security: prevents token in server logs/referrer)
-        const fragmentParams = `token=${accessToken}&isNewUser=${isNewUser}`;
-        return NextResponse.redirect(`${redirectURL}#${fragmentParams}`, 302);
+        const redirectResponse = NextResponse.redirect(`${redirectURL}?oauth=success&isNewUser=${isNewUser}`, 302);
+        return setAuthCookies(redirectResponse, accessToken, sessionID);
     } catch (error: unknown) {
         console.error('OAuth callback error:', error);
         return errorResponse('Internal server error', 500);
