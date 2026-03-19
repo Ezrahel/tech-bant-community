@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, paginationParams, getUserFromRequest } from '@/lib/api-helpers';
+import { syncUserPostsCount } from '@/lib/counters';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { createHash } from 'crypto';
 import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/lib/security';
@@ -152,20 +153,21 @@ export async function POST(req: NextRequest) {
             }
         }
 
-        // Increment user posts count
-        const { data: authorProfile } = await supabase
-            .from('users')
-            .select('posts_count')
-            .eq('id', user.id)
-            .single();
+        const syncedPostsCount = await syncUserPostsCount(user.id, now);
+        if (syncedPostsCount === null) {
+            const { count } = await supabase
+                .from('posts')
+                .select('*', { count: 'exact', head: true })
+                .eq('author_id', user.id);
 
-        await supabase
-            .from('users')
-            .update({
-                posts_count: (authorProfile?.posts_count || 0) + 1,
-                updated_at: now,
-            })
-            .eq('id', user.id);
+            await supabase
+                .from('users')
+                .update({
+                    posts_count: count || 0,
+                    updated_at: now,
+                })
+                .eq('id', user.id);
+        }
 
         return jsonResponse(post, 201);
     } catch (error: unknown) {

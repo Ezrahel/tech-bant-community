@@ -171,11 +171,11 @@ const UserProfilePage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-black">
-      <div className="max-w-4xl mx-auto px-4 py-8">
+      <div className="max-w-4xl mx-auto px-0 py-2 sm:px-4 sm:py-6">
         {/* Back Button */}
         <button
           onClick={() => navigate(-1)}
-          className="flex items-center space-x-2 text-gray-400 hover:text-white transition-colors mb-6 text-sm"
+          className="mb-4 ml-3 flex items-center space-x-2 text-sm text-gray-400 transition-colors hover:text-white sm:mb-6 sm:ml-0"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
@@ -194,7 +194,7 @@ const UserProfilePage: React.FC = () => {
         )}
 
         {/* Profile Card */}
-        <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-2xl overflow-hidden mb-6">
+          <div className="bg-gray-900/50 backdrop-blur-xl border-y border-gray-800 sm:border sm:rounded-2xl overflow-hidden mb-6">
           {/* Cover Photo */}
           <div className="h-48 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 relative">
             {isCurrentUser && (
@@ -205,13 +205,13 @@ const UserProfilePage: React.FC = () => {
           </div>
 
           {/* Profile Info */}
-          <div className="relative px-6 pb-6">
+          <div className="relative px-4 pb-5 sm:px-6 sm:pb-6">
             {/* Avatar */}
             <div className="relative -mt-16 mb-4">
               <img
                 src={profile.avatar}
                 alt={profile.name}
-                className="w-32 h-32 rounded-full border-4 border-black"
+                className="h-24 w-24 rounded-full border-4 border-black sm:h-32 sm:w-32"
               />
               {isCurrentUser && (
                 <button className="absolute bottom-2 right-2 p-2 bg-black/70 hover:bg-black/90 rounded-full transition-colors">

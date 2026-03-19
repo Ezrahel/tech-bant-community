@@ -1,11 +1,8 @@
-// Discussions page - filtered view of posts
 import React from 'react';
-import { MessageSquare } from 'lucide-react';
-import HomePage from './HomePage';
+import CommunityFeedPage from './CommunityFeedPage';
 
 const DiscussionsPage: React.FC = () => {
-  // This is essentially the same as HomePage but filtered to discussions
-  return <HomePage />;
+  return <CommunityFeedPage mode="discussions" />;
 };
 
 export default DiscussionsPage;

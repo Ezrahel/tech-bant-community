@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, getUserFromRequest } from '@/lib/api-helpers';
+import { incrementPostViews, syncUserPostsCount } from '@/lib/counters';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/lib/security';
 
@@ -35,20 +36,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             isBookmarked = !!bookmark;
         }
 
-        // Increment views (Non-atomic for now as standard Supabase JS client limitation without RPC)
-        await supabase
-            .from('posts')
-            .update({
-                views: (post.views || 0) + 1,
-                updated_at: post.updated_at // Keep original updated_at if we don't want view to trigger update
-            })
-            .eq('id', id);
+        const incrementedViews = await incrementPostViews(id);
+        if (incrementedViews === null) {
+            await supabase
+                .from('posts')
+                .update({
+                    views: (post.views || 0) + 1,
+                    updated_at: post.updated_at
+                })
+                .eq('id', id);
+        }
 
         return jsonResponse({
             ...post,
             is_liked: isLiked,
             is_bookmarked: isBookmarked,
-            views: (post.views || 0) + 1 // Reflect the increment in response
+            views: incrementedViews ?? ((post.views || 0) + 1)
         });
     } catch (error: unknown) {
         console.error('Get post error:', error);
@@ -151,17 +154,16 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         const { error } = await supabase.from('posts').delete().eq('id', id);
         if (error) return errorResponse('Failed to delete post', 500);
 
-        // Decrement user posts count
-        const { data: userProfile } = await supabase
-            .from('users')
-            .select('posts_count')
-            .eq('id', user.id)
-            .single();
+        const syncedPostsCount = await syncUserPostsCount(user.id);
+        if (syncedPostsCount === null) {
+            const { count } = await supabase
+                .from('posts')
+                .select('*', { count: 'exact', head: true })
+                .eq('author_id', user.id);
 
-        if (userProfile) {
             await supabase
                 .from('users')
-                .update({ posts_count: Math.max(0, (userProfile.posts_count || 0) - 1) })
+                .update({ posts_count: count || 0 })
                 .eq('id', user.id);
         }
 

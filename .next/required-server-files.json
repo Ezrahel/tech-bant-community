@@ -45,10 +45,7 @@
       "path": "/_next/image",
       "loader": "default",
       "loaderFile": "",
-      "domains": [
-        "images.pexels.com",
-        "lh3.googleusercontent.com"
-      ],
+      "domains": [],
       "disableStaticImages": false,
       "minimumCacheTTL": 14400,
       "formats": [
@@ -66,7 +63,16 @@
           "search": ""
         }
       ],
-      "remotePatterns": [],
+      "remotePatterns": [
+        {
+          "protocol": "https",
+          "hostname": "images.pexels.com"
+        },
+        {
+          "protocol": "https",
+          "hostname": "lh3.googleusercontent.com"
+        }
+      ],
       "qualities": [
         75
       ],

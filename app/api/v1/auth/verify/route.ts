@@ -1,11 +1,15 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, withAuth } from '@/lib/api-helpers';
+import { clearAuthCookies, jsonResponse, errorResponse, withAuth } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
 export async function GET(req: NextRequest) {
     try {
         const authResult = await withAuth(req);
-        if (authResult instanceof Response) return authResult;
+        if (authResult instanceof Response) {
+            return authResult.status === 401
+                ? clearAuthCookies(authResult)
+                : authResult;
+        }
         const { user: authUser } = authResult;
 
         const supabase = getSupabaseAdmin();

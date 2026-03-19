@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, paginationParams } from '@/lib/api-helpers';
+import { syncPostCommentsCount } from '@/lib/counters';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { PUBLIC_USER_COLUMNS, sanitizeUserContent } from '@/lib/security';
 
@@ -67,19 +68,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         if (error) return errorResponse('Failed to create comment', 500);
 
-        // Increment post comments count
-        const { count: commentCount } = await supabase
-            .from('comments')
-            .select('*', { count: 'exact', head: true })
-            .eq('post_id', postId);
+        const syncedCommentsCount = await syncPostCommentsCount(postId, now);
+        if (syncedCommentsCount === null) {
+            const { count: commentCount } = await supabase
+                .from('comments')
+                .select('*', { count: 'exact', head: true })
+                .eq('post_id', postId);
 
-        await supabase
-            .from('posts')
-            .update({
-                comments: commentCount || 0,
-                updated_at: new Date().toISOString()
-            })
-            .eq('id', postId);
+            await supabase
+                .from('posts')
+                .update({
+                    comments: commentCount || 0,
+                    updated_at: now
+                })
+                .eq('id', postId);
+        }
 
         // Update counters
         await supabase.from('counters').upsert(

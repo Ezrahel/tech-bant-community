@@ -34,19 +34,21 @@ const SupportPage: React.FC = () => {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">Support Center</h1>
+    <div className="max-w-4xl mx-auto px-0 py-2 sm:px-4 sm:py-6">
+      <div className="mb-6 px-3 sm:mb-8 sm:px-0">
+        <h1 className="text-2xl font-bold text-white sm:text-3xl mb-2">Support Center</h1>
         <p className="text-gray-400">Get help with your account or report issues</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 gap-4 px-3 sm:px-0 md:grid-cols-2 sm:gap-6 mb-6 sm:mb-8">
         {categories.map((cat) => {
           const Icon = cat.icon;
           return (
             <div
               key={cat.id}
-              className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-2xl p-6 hover:bg-gray-900/70 transition-all cursor-pointer"
+              className={`bg-gray-900/50 backdrop-blur-xl border rounded-2xl p-5 sm:p-6 transition-all cursor-pointer ${
+                category === cat.id ? 'border-white/25 bg-white/[0.06]' : 'border-gray-800 hover:bg-gray-900/70'
+              }`}
               onClick={() => setCategory(cat.id)}
             >
               <div className="flex items-center space-x-4">
@@ -63,7 +65,7 @@ const SupportPage: React.FC = () => {
         })}
       </div>
 
-      <div className="bg-gray-900/50 backdrop-blur-xl border border-gray-800 rounded-2xl p-8">
+      <div className="bg-gray-900/50 backdrop-blur-xl border-y border-gray-800 sm:border sm:rounded-2xl p-5 sm:p-8">
         <h2 className="text-xl font-semibold text-white mb-6">Contact Support</h2>
 
         {submitted ? (
@@ -139,7 +141,7 @@ const SupportPage: React.FC = () => {
       </div>
 
       {/* FAQ Section */}
-      <div className="mt-8">
+      <div className="mt-8 px-3 sm:px-0">
         <h2 className="text-xl font-semibold text-white mb-6">Frequently Asked Questions</h2>
         <div className="space-y-4">
           {[

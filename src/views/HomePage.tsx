@@ -91,8 +91,8 @@ const HomePage: React.FC = () => {
   return (
     <div className="min-h-screen bg-black text-white overflow-hidden">
       <section className="relative border-b border-white/10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.14),transparent_24%),radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.07),transparent_22%),linear-gradient(180deg,#0a0a0a_0%,#000_45%,#050505_100%)]" />
-        <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(#ffffff_1px,transparent_1px)] [background-size:20px_20px]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.14),transparent_24%),radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.07),transparent_22%),linear-gradient(180deg,#0a0a0a_0%,#000_45%,#050505_100%)]" />
+        <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:radial-gradient(#ffffff_1px,transparent_1px)] [background-size:20px_20px]" />
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-14 pb-20 sm:pt-20 sm:pb-28">
           <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-10 items-start">
             <div className="max-w-4xl">
@@ -247,8 +247,8 @@ const HomePage: React.FC = () => {
               </div>
 
               <div className="relative min-h-[340px] rounded-[2rem] border border-white/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.01))] p-6 overflow-hidden">
-                <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
-                <div className="absolute -top-16 right-10 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
+                <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:radial-gradient(#ffffff_1px,transparent_1px)] [background-size:18px_18px]" />
+                <div className="pointer-events-none absolute -top-16 right-10 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
                 <div className="relative flex h-full flex-col justify-between">
                   <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/[0.04]">
                     <FontAwesomeIcon icon={row.icon} className="w-6 h-6 text-white/80" />
@@ -346,8 +346,8 @@ const HomePage: React.FC = () => {
       <section className="bg-[linear-gradient(180deg,#020202_0%,#0a0a0a_100%)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
           <div className="rounded-[2.25rem] border border-white/10 bg-white/[0.03] p-8 sm:p-12 overflow-hidden relative">
-            <div className="absolute inset-0 opacity-[0.08] [background-image:radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
-            <div className="absolute -right-10 top-0 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
+            <div className="pointer-events-none absolute inset-0 opacity-[0.08] [background-image:radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
+            <div className="pointer-events-none absolute -right-10 top-0 h-48 w-48 rounded-full bg-white/10 blur-3xl" />
             <div className="relative max-w-4xl">
               <div className="text-[11px] uppercase tracking-[0.3em] text-white/38">Ready</div>
               <h2 className="mt-4 text-3xl sm:text-6xl font-semibold tracking-[-0.06em] text-balance">

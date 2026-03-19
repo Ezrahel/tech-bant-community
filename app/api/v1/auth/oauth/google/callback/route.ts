@@ -36,48 +36,35 @@ export async function GET(req: NextRequest) {
         }
 
         const redirectURL = oauthState.redirect_url || url.origin;
-        await supabase.from('oauth_states').delete().eq('state', state);
 
         // Exchange code for session via Supabase Auth
         const supabaseURL = getSupabaseURL();
         const anonKey = getSupabaseAnonKey();
 
-        const tokenResp = await fetch(`${supabaseURL}/auth/v1/token?grant_type=pkce`, {
+        const tokenResp = await fetch(`${supabaseURL}/auth/v1/token?grant_type=authorization_code`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'apikey': anonKey,
             },
             body: JSON.stringify({
-                auth_code: code,
-                code_verifier: url.searchParams.get('code_verifier') || '',
+                code,
             }),
         });
 
-        // If PKCE flow doesn't work, try authorization_code grant
-        let authData;
         if (!tokenResp.ok) {
-            const altResp = await fetch(`${supabaseURL}/auth/v1/token?grant_type=authorization_code`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': anonKey,
-                },
-                body: JSON.stringify({ code }),
-            });
-
-            if (!altResp.ok) {
-                return errorResponse('Failed to exchange authorization code', 400);
-            }
-            authData = await altResp.json();
-        } else {
-            authData = await tokenResp.json();
+            await supabase.from('oauth_states').delete().eq('state', state);
+            return errorResponse('Failed to exchange authorization code', 400);
         }
 
+        const authData = await tokenResp.json();
+        await supabase.from('oauth_states').delete().eq('state', state);
+
         const accessToken = authData.access_token;
+        const supabaseRefreshToken = authData.refresh_token;
         const userID = authData.user?.id;
 
-        if (!userID || !accessToken) {
+        if (!userID || !accessToken || !supabaseRefreshToken) {
             return errorResponse('Failed to authenticate with Google', 400);
         }
 
@@ -131,7 +118,7 @@ export async function GET(req: NextRequest) {
         await supabase.from('sessions').insert({
             id: sessionID,
             user_id: userID,
-            token_id: accessToken,
+            token_id: supabaseRefreshToken,
             ip_address: req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || 'unknown',
             user_agent: req.headers.get('user-agent') || 'unknown',
             created_at: now,

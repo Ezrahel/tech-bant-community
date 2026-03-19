@@ -242,23 +242,29 @@ const PostDetailPage: React.FC = () => {
       {/* Post */}
       <article className="bg-gray-900/50 backdrop-blur-xl border-y sm:border border-gray-800 sm:rounded-2xl p-4 sm:p-8 mb-4 sm:mb-6">
         {/* Author Header */}
-        <div className="flex items-center space-x-3 sm:space-x-4 mb-4 sm:mb-6">
+        <div className="mb-4 flex items-start gap-3 sm:mb-6 sm:gap-4">
           <img
             src={post.author.avatar}
             alt={post.author.name}
             className="w-10 h-10 sm:w-12 sm:w-12 rounded-full ring-2 ring-gray-800"
           />
-          <div className="flex flex-1">
-            <div className="flex items-center space-x-2">
-              <h3 className="font-semibold text-white text-sm sm:text-base">{post.author.name}</h3>
-              {post.author.isVerified && (
-                <FontAwesomeIcon icon={faCheckCircle} className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-400" />
-              )}
-              {post.author.isAdmin && (
-                <FontAwesomeIcon icon={faShieldAlt} className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-gray-500" />
-              )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <h3 className="truncate font-semibold text-white text-sm sm:text-base">{post.author.name}</h3>
+                  {post.author.isVerified && (
+                    <FontAwesomeIcon icon={faCheckCircle} className="h-3.5 w-3.5 shrink-0 text-gray-400 sm:h-4 sm:w-4" />
+                  )}
+                  {post.author.isAdmin && (
+                    <FontAwesomeIcon icon={faShieldAlt} className="h-3.5 w-3.5 shrink-0 text-gray-500 sm:h-4 sm:w-4" />
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-[0.14em] sm:text-right leading-4 sm:leading-5">
+                {formatDate(post.publishedAt)}
+              </p>
             </div>
-            <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-wider">{formatDate(post.publishedAt)}</p>
           </div>
         </div>
 

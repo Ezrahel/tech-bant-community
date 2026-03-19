@@ -1,5 +1,6 @@
 // Authentication service using Node.js/Next.js backend API
-import { apiClient } from '../lib/api';
+import { ApiRequestError, apiClient } from '../lib/api';
+import { ApiUserResponse, mapApiUserToUser } from '../lib/users';
 import { User } from '../types';
 
 export interface AuthResponse {
@@ -7,6 +8,15 @@ export interface AuthResponse {
   refreshToken: string;
   expiresIn: number;
   user: User;
+  roles: string[];
+  permissions: string[];
+}
+
+interface ApiAuthResponse {
+  token: string;
+  refreshToken: string;
+  expiresIn: number;
+  user: ApiUserResponse;
   roles: string[];
   permissions: string[];
 }
@@ -43,16 +53,24 @@ class AuthService {
     return localStorage.getItem('refresh_token');
   }
 
-  private persistAuthResponse(response: AuthResponse): AuthResponse {
+  private isUnauthorizedError(error: unknown): boolean {
+    return error instanceof ApiRequestError && error.status === 401;
+  }
+
+  private persistAuthResponse(response: ApiAuthResponse): AuthResponse {
     localStorage.setItem('auth_token', response.token);
     this.setRefreshToken(response.refreshToken);
-    return response;
+
+    return {
+      ...response,
+      user: mapApiUserToUser(response.user),
+    };
   }
 
   // Sign up new user
   async signup(data: SignupRequest): Promise<AuthResponse> {
     try {
-      const response = await apiClient.post<AuthResponse>('/auth/signup', {
+      const response = await apiClient.post<ApiAuthResponse>('/auth/signup', {
         email: data.email,
         password: data.password,
         name: data.name,
@@ -67,7 +85,7 @@ class AuthService {
   // Login user
   async login(data: LoginRequest): Promise<AuthResponse> {
     try {
-      const response = await apiClient.post<AuthResponse>('/auth/login', {
+      const response = await apiClient.post<ApiAuthResponse>('/auth/login', {
         email: data.email,
         password: data.password,
         otpCode: data.otpCode,
@@ -157,19 +175,28 @@ class AuthService {
     if (!token && !refreshToken) return null;
 
     try {
-      const response = await apiClient.get<{ user: User }>('/auth/verify');
-      return response.user;
+      const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
+      return mapApiUserToUser(response.user);
     } catch (error: any) {
       if (refreshToken) {
         try {
           await this.refreshStoredSession();
-          const response = await apiClient.get<{ user: User }>('/auth/verify');
-          return response.user;
+          const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
+          return mapApiUserToUser(response.user);
         } catch (refreshError) {
-          console.error('Session refresh failed:', refreshError);
+          if (!this.isUnauthorizedError(refreshError)) {
+            console.error('Session refresh failed:', refreshError);
+          }
           this.clearStoredSession();
+          return null;
         }
       }
+
+      if (this.isUnauthorizedError(error)) {
+        this.clearStoredSession();
+        return null;
+      }
+
       console.error('Get current user error:', error);
       return null;
     }
@@ -183,7 +210,7 @@ class AuthService {
   // Refresh token
   async refreshToken(refreshToken: string): Promise<AuthResponse> {
     try {
-      const response = await apiClient.post<AuthResponse>('/auth/refresh', {
+      const response = await apiClient.post<ApiAuthResponse>('/auth/refresh', {
         refreshToken,
       });
       return this.persistAuthResponse(response);

@@ -40,6 +40,22 @@ export function clearAuthCookies(response: NextResponse) {
     return response;
 }
 
+function isExpectedAuthFailure(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false;
+
+    const authError = error as {
+        code?: string;
+        status?: number;
+        message?: string;
+    };
+
+    return authError.code === 'bad_jwt' ||
+        authError.status === 401 ||
+        authError.status === 403 ||
+        authError.message?.includes('token is expired') === true ||
+        authError.message?.includes('invalid JWT') === true;
+}
+
 // ---- Auth helpers ----
 
 export interface AuthUser {
@@ -64,7 +80,9 @@ export async function getUserFromRequest(req: NextRequest): Promise<AuthUser | n
         const { data, error } = await supabase.auth.getUser(token);
 
         if (error) {
-            console.error('getUserFromRequest: Supabase auth error:', error);
+            if (!isExpectedAuthFailure(error)) {
+                console.error('getUserFromRequest: Supabase auth error:', error);
+            }
             return null;
         }
 

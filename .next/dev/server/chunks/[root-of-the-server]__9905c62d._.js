@@ -112,6 +112,12 @@ function getStorageBucket() {
 "use strict";
 
 __turbopack_context__.s([
+    "ACCESS_TOKEN_COOKIE",
+    ()=>ACCESS_TOKEN_COOKIE,
+    "REFRESH_TOKEN_COOKIE",
+    ()=>REFRESH_TOKEN_COOKIE,
+    "clearAuthCookies",
+    ()=>clearAuthCookies,
     "errorResponse",
     ()=>errorResponse,
     "getClientIP",
@@ -126,6 +132,8 @@ __turbopack_context__.s([
     ()=>paginationParams,
     "parseBody",
     ()=>parseBody,
+    "setAuthCookies",
+    ()=>setAuthCookies,
     "withAdmin",
     ()=>withAdmin,
     "withAuth",
@@ -137,6 +145,8 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$serv
 var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabase$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/supabase.ts [app-route] (ecmascript)");
 ;
 ;
+const ACCESS_TOKEN_COOKIE = 'tbc_access_token';
+const REFRESH_TOKEN_COOKIE = 'tbc_refresh_token';
 function jsonResponse(data, status = 200) {
     return __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$server$2e$js__$5b$app$2d$route$5d$__$28$ecmascript$29$__["NextResponse"].json(data, {
         status
@@ -149,16 +159,51 @@ function errorResponse(message, status = 400) {
         status
     });
 }
+function cookieConfig(maxAgeSeconds) {
+    return {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: ("TURBOPACK compile-time value", "development") === 'production',
+        path: '/',
+        maxAge: maxAgeSeconds
+    };
+}
+function setAuthCookies(response, accessToken, refreshToken) {
+    response.cookies.set(ACCESS_TOKEN_COOKIE, accessToken, cookieConfig(60 * 60));
+    if (refreshToken) {
+        response.cookies.set(REFRESH_TOKEN_COOKIE, refreshToken, cookieConfig(60 * 60 * 24));
+    }
+    return response;
+}
+function clearAuthCookies(response) {
+    response.cookies.set(ACCESS_TOKEN_COOKIE, '', {
+        ...cookieConfig(0),
+        maxAge: 0
+    });
+    response.cookies.set(REFRESH_TOKEN_COOKIE, '', {
+        ...cookieConfig(0),
+        maxAge: 0
+    });
+    return response;
+}
+function isExpectedAuthFailure(error) {
+    if (!error || typeof error !== 'object') return false;
+    const authError = error;
+    return authError.code === 'bad_jwt' || authError.status === 401 || authError.status === 403 || authError.message?.includes('token is expired') === true || authError.message?.includes('invalid JWT') === true;
+}
 async function getUserFromRequest(req) {
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader?.startsWith('Bearer ')) return null;
-    const token = authHeader.slice(7);
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const cookieToken = req.cookies.get(ACCESS_TOKEN_COOKIE)?.value || null;
+    const token = bearerToken || cookieToken;
     if (!token) return null;
     try {
         const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabase$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["getSupabaseAdmin"])();
         const { data, error } = await supabase.auth.getUser(token);
         if (error) {
-            console.error('getUserFromRequest: Supabase auth error:', error);
+            if (!isExpectedAuthFailure(error)) {
+                console.error('getUserFromRequest: Supabase auth error:', error);
+            }
             return null;
         }
         if (!data.user) {
@@ -251,7 +296,9 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabase$2e$ts__$5b$a
 async function GET(req) {
     try {
         const authResult = await (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$helpers$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["withAuth"])(req);
-        if (authResult instanceof Response) return authResult;
+        if (authResult instanceof Response) {
+            return authResult.status === 401 ? (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$helpers$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["clearAuthCookies"])(authResult) : authResult;
+        }
         const { user: authUser } = authResult;
         const supabase = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$supabase$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["getSupabaseAdmin"])();
         const { data: user, error } = await supabase.from('users').select('*').eq('id', authUser.id).single();

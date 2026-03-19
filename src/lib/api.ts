@@ -7,6 +7,18 @@ export interface ApiError {
   code?: number;
 }
 
+export class ApiRequestError extends Error {
+  status?: number;
+  code?: number;
+
+  constructor(message: string, status?: number, code?: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
 class ApiClient {
   private baseURL: string;
 
@@ -84,7 +96,11 @@ class ApiClient {
           error: `HTTP ${response.status}: ${response.statusText}`,
           code: response.status,
         }));
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+        throw new ApiRequestError(
+          errorData.error || `HTTP ${response.status}`,
+          response.status,
+          errorData.code
+        );
       }
 
       // Handle 204 No Content

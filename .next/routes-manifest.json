@@ -38,12 +38,52 @@
       "namedRegex": "^/api/v1/admin/reports/(?<nxtPid>[^/]+?)(?:/)?$"
     },
     {
+      "page": "/api/v1/admin/reports/[id]/resolve",
+      "regex": "^/api/v1/admin/reports/([^/]+?)/resolve(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/v1/admin/reports/(?<nxtPid>[^/]+?)/resolve(?:/)?$"
+    },
+    {
       "page": "/api/v1/admin/users/[id]",
       "regex": "^/api/v1/admin/users/([^/]+?)(?:/)?$",
       "routeKeys": {
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/v1/admin/users/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/v1/admin/users/[id]/ban",
+      "regex": "^/api/v1/admin/users/([^/]+?)/ban(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/v1/admin/users/(?<nxtPid>[^/]+?)/ban(?:/)?$"
+    },
+    {
+      "page": "/api/v1/admin/users/[id]/promote",
+      "regex": "^/api/v1/admin/users/([^/]+?)/promote(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/v1/admin/users/(?<nxtPid>[^/]+?)/promote(?:/)?$"
+    },
+    {
+      "page": "/api/v1/admin/users/[id]/unban",
+      "regex": "^/api/v1/admin/users/([^/]+?)/unban(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/v1/admin/users/(?<nxtPid>[^/]+?)/unban(?:/)?$"
+    },
+    {
+      "page": "/api/v1/admin/users/[id]/verify",
+      "regex": "^/api/v1/admin/users/([^/]+?)/verify(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/v1/admin/users/(?<nxtPid>[^/]+?)/verify(?:/)?$"
     },
     {
       "page": "/api/v1/comments/[id]",
@@ -100,6 +140,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/v1/posts/(?<nxtPid>[^/]+?)/like(?:/)?$"
+    },
+    {
+      "page": "/api/v1/posts/[id]/share",
+      "regex": "^/api/v1/posts/([^/]+?)/share(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/v1/posts/(?<nxtPid>[^/]+?)/share(?:/)?$"
     },
     {
       "page": "/api/v1/users/[id]",
@@ -234,6 +282,18 @@
       "namedRegex": "^/api/v1/auth/logout(?:/)?$"
     },
     {
+      "page": "/api/v1/auth/oauth/google",
+      "regex": "^/api/v1/auth/oauth/google(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/v1/auth/oauth/google(?:/)?$"
+    },
+    {
+      "page": "/api/v1/auth/oauth/google/callback",
+      "regex": "^/api/v1/auth/oauth/google/callback(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/v1/auth/oauth/google/callback(?:/)?$"
+    },
+    {
       "page": "/api/v1/auth/refresh",
       "regex": "^/api/v1/auth/refresh(?:/)?$",
       "routeKeys": {},
@@ -274,6 +334,12 @@
       "regex": "^/api/v1/posts(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/v1/posts(?:/)?$"
+    },
+    {
+      "page": "/api/v1/posts/categories",
+      "regex": "^/api/v1/posts/categories(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/v1/posts/categories(?:/)?$"
     },
     {
       "page": "/api/v1/users/me",

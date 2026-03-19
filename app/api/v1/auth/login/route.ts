@@ -89,8 +89,11 @@ export async function POST(req: NextRequest) {
 
         const authData = await authResp.json();
         const accessToken = authData.access_token;
+        const supabaseRefreshToken = authData.refresh_token;
 
-        if (userError || !user) return errorResponse('Invalid credentials', 401);
+        if (userError || !user || !accessToken || !supabaseRefreshToken) {
+            return errorResponse('Invalid credentials', 401);
+        }
 
         // Check active
         if (!user.is_active) {
@@ -148,7 +151,7 @@ export async function POST(req: NextRequest) {
         await supabase.from('sessions').insert({
             id: sessionID,
             user_id: user.id,
-            token_id: accessToken,
+            token_id: supabaseRefreshToken,
             ip_address: ipAddress,
             user_agent: userAgent,
             created_at: now,
@@ -172,7 +175,7 @@ export async function POST(req: NextRequest) {
         const response = jsonResponse({
             token: accessToken,
             refreshToken: sessionID,
-            expiresIn: 86400,
+            expiresIn: authData.expires_in || 3600,
             user,
             roles: [user.role],
             permissions,

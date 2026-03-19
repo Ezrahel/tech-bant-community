@@ -5,8 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:all": "sh -c 'npm run next-dev & npm run dev; wait'",
     "next-dev": "next dev",
-    "build": "vite build",
+    "build": "npm run build:web && npm run build:api",
+    "build:web": "vite build",
+    "build:api": "next build",
+    "start": "NODE_ENV=production node server.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "rm -rf .tmp-tests && tsc -p tsconfig.tests.json && node --test --experimental-specifier-resolution=node .tmp-tests/tests/*.test.js && rm -rf .tmp-tests",

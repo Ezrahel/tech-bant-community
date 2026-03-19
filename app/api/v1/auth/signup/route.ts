@@ -1,8 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent, setAuthCookies } from '@/lib/api-helpers';
-import { getSupabaseAdmin, getSupabaseURL, getSupabaseAnonKey } from '@/lib/supabase';
+import { getSupabaseAdmin } from '@/lib/supabase';
 import { randomBytes } from 'crypto';
-import { normalizeEmail, sanitizePlainText } from '@/lib/security';
 import { validateSignupPayload } from '@/lib/validation';
 
 export async function POST(req: NextRequest) {
@@ -51,6 +50,8 @@ export async function POST(req: NextRequest) {
         // or just proceed if we don't need the user's session token for the profile creation
         // (which we don't since we use the admin client for DB operations)
         let accessToken = '';
+        let supabaseRefreshToken = '';
+        let accessTokenExpiresIn = 3600;
         const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
             email,
             password
@@ -58,6 +59,13 @@ export async function POST(req: NextRequest) {
 
         if (!signInError && signInData.session) {
             accessToken = signInData.session.access_token;
+            supabaseRefreshToken = signInData.session.refresh_token;
+            accessTokenExpiresIn = signInData.session.expires_in || 3600;
+        }
+
+        if (!accessToken || !supabaseRefreshToken) {
+            await supabase.auth.admin.deleteUser(userID);
+            return errorResponse('Failed to create authenticated session', 500);
         }
 
         const now = new Date().toISOString();
@@ -95,7 +103,7 @@ export async function POST(req: NextRequest) {
         await supabase.from('sessions').insert({
             id: sessionID,
             user_id: userID,
-            token_id: accessToken,
+            token_id: supabaseRefreshToken,
             ip_address: ipAddress,
             user_agent: userAgent,
             created_at: now,
@@ -124,7 +132,7 @@ export async function POST(req: NextRequest) {
         const response = jsonResponse({
             token: accessToken,
             refreshToken: sessionID,
-            expiresIn: 86400,
+            expiresIn: accessTokenExpiresIn,
             user,
             roles: [user?.role || 'user'],
             permissions: getRolePermissions(user?.role || 'user'),

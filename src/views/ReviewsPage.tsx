@@ -1,10 +1,8 @@
-// Reviews page - filtered view of review posts
 import React from 'react';
-import HomePage from './HomePage';
+import CommunityFeedPage from './CommunityFeedPage';
 
 const ReviewsPage: React.FC = () => {
-  // This is essentially the same as HomePage but filtered to reviews
-  return <HomePage />;
+  return <CommunityFeedPage mode="reviews" />;
 };
 
 export default ReviewsPage;

@@ -1,4 +1,4 @@
-import { normalizeEmail, sanitizePlainText } from './security.js';
+import { normalizeEmail, sanitizePlainText } from './security';
 
 type ValidationSuccess<T> = { ok: true; data: T };
 type ValidationFailure = { ok: false; error: string };

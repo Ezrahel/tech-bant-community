@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent, REFRESH_TOKEN_COOKIE, setAuthCookies } from '@/lib/api-helpers';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin, getSupabaseAnonKey, getSupabaseURL } from '@/lib/supabase';
 import { randomBytes } from 'crypto';
 
 export async function POST(req: NextRequest) {
@@ -36,6 +36,39 @@ export async function POST(req: NextRequest) {
 
         if (!user) return errorResponse('User not found', 404);
 
+        const supabaseURL = getSupabaseURL();
+        const anonKey = getSupabaseAnonKey();
+        const tokenResp = await fetch(`${supabaseURL}/auth/v1/token?grant_type=refresh_token`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': anonKey,
+            },
+            body: JSON.stringify({
+                refresh_token: session.token_id,
+            }),
+        });
+
+        if (!tokenResp.ok) {
+            await supabase
+                .from('sessions')
+                .update({ is_active: false })
+                .eq('id', refreshToken);
+            return errorResponse('Invalid or expired refresh token', 401);
+        }
+
+        const authData = await tokenResp.json();
+        const accessToken = authData.access_token;
+        const supabaseRefreshToken = authData.refresh_token;
+
+        if (!accessToken || !supabaseRefreshToken) {
+            await supabase
+                .from('sessions')
+                .update({ is_active: false })
+                .eq('id', refreshToken);
+            return errorResponse('Invalid or expired refresh token', 401);
+        }
+
         // Create new session
         const now = new Date().toISOString();
         const sessionID = randomBytes(32).toString('base64url');
@@ -44,7 +77,7 @@ export async function POST(req: NextRequest) {
         await supabase.from('sessions').insert({
             id: sessionID,
             user_id: user.id,
-            token_id: session.token_id,
+            token_id: supabaseRefreshToken,
             ip_address: ipAddress,
             user_agent: userAgent,
             created_at: now,
@@ -62,15 +95,15 @@ export async function POST(req: NextRequest) {
         const permissions = getRolePermissions(user.role);
 
         const response = jsonResponse({
-            token: session.token_id,
+            token: accessToken,
             refreshToken: sessionID,
-            expiresIn: 86400,
+            expiresIn: authData.expires_in || 3600,
             user,
             roles: [user.role],
             permissions,
         });
 
-        return setAuthCookies(response, session.token_id, sessionID);
+        return setAuthCookies(response, accessToken, sessionID);
     } catch (error: unknown) {
         console.error('Refresh error:', error);
         return errorResponse('Internal server error', 500);

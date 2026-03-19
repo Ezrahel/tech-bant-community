@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth } from '@/lib/api-helpers';
+import { syncPostCommentsCount } from '@/lib/counters';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { PUBLIC_USER_COLUMNS, sanitizeUserContent } from '@/lib/security';
 
@@ -61,12 +62,20 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         if (!existing) return errorResponse('Comment not found', 404);
         if (existing.author_id !== user.id) return errorResponse('Unauthorized', 403);
 
-        await supabase.from('comments').delete().eq('id', commentId);
+        const { error: deleteError } = await supabase.from('comments').delete().eq('id', commentId);
+        if (deleteError) return errorResponse('Failed to delete comment', 500);
 
-        // Decrement post comments count
-        const { data: post } = await supabase.from('posts').select('comments').eq('id', existing.post_id).single();
-        if (post) {
-            await supabase.from('posts').update({ comments: Math.max(0, (post.comments || 0) - 1) }).eq('id', existing.post_id);
+        const syncedCommentsCount = await syncPostCommentsCount(existing.post_id);
+        if (syncedCommentsCount === null) {
+            const { count } = await supabase
+                .from('comments')
+                .select('*', { count: 'exact', head: true })
+                .eq('post_id', existing.post_id);
+
+            await supabase
+                .from('posts')
+                .update({ comments: count || 0 })
+                .eq('id', existing.post_id);
         }
 
         return jsonResponse({ message: 'Comment deleted successfully' });

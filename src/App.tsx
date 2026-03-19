@@ -15,13 +15,17 @@ import UserProfilePage from './views/UserProfilePage';
 import OAuthCallbackPage from './views/OAuthCallbackPage';
 import PostDetailPage from './views/PostDetailPage';
 import ForgotPasswordPage from './views/ForgotPasswordPage';
+import NotificationsPage from './views/NotificationsPage';
+import ProtectedPageShell from './components/ProtectedPageShell';
 
 function ProtectedRoute({
   children,
-  adminOnly = false
+  adminOnly = false,
+  withShell = true,
 }: {
   children: React.ReactNode;
   adminOnly?: boolean;
+  withShell?: boolean;
 }) {
   const { user, loading } = useAuth();
   const location = useLocation();
@@ -45,7 +49,11 @@ function ProtectedRoute({
     return <Navigate to="/" replace />;
   }
 
-  return <>{children}</>;
+  if (!withShell) {
+    return <>{children}</>;
+  }
+
+  return <ProtectedPageShell>{children}</ProtectedPageShell>;
 }
 
 function AppContent() {
@@ -69,7 +77,7 @@ function AppContent() {
           <Route
             path="/admin"
             element={
-              <ProtectedRoute adminOnly>
+              <ProtectedRoute adminOnly withShell={false}>
                 <AdminDashboard />
               </ProtectedRoute>
             }
@@ -125,6 +133,15 @@ function AppContent() {
             element={
               <ProtectedRoute>
                 <ReviewsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/notifications"
+            element={
+              <ProtectedRoute>
+                <NotificationsPage />
               </ProtectedRoute>
             }
           />

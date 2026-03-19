@@ -48,6 +48,11 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
     return location.pathname.startsWith(path);
   };
 
+  const navigateTo = (path: string) => {
+    navigate(path);
+    setShowMobileMenu(false);
+  };
+
   const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   return (
@@ -79,8 +84,9 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
 
             {/* Navigation (Desktop) */}
             <nav className="hidden md:flex items-center space-x-1 ml-4">
-              <Link
-                to="/"
+              <button
+                type="button"
+                onClick={() => navigateTo('/')}
                 className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${isActive('/')
                   ? 'text-white bg-gray-900/50'
                   : 'text-gray-400 hover:text-white hover:bg-gray-900/30'
@@ -88,9 +94,10 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
               >
                 <FontAwesomeIcon icon={faHome} className="w-4 h-4" />
                 <span>Home</span>
-              </Link>
-              <Link
-                to="/discussions"
+              </button>
+              <button
+                type="button"
+                onClick={() => navigateTo('/discussions')}
                 className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${isActive('/discussions')
                   ? 'text-white bg-gray-900/50'
                   : 'text-gray-400 hover:text-white hover:bg-gray-900/30'
@@ -98,10 +105,11 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
               >
                 <FontAwesomeIcon icon={faComment} className="w-4 h-4" />
                 <span>Discussions</span>
-              </Link>
+              </button>
               <nav className="flex items-center">
-                <Link
-                  to="/reviews"
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/reviews')}
                   className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${isActive('/reviews')
                     ? 'text-white bg-gray-900/50'
                     : 'text-gray-400 hover:text-white hover:bg-gray-900/30'
@@ -109,9 +117,10 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                 >
                   <FontAwesomeIcon icon={faStar} className="w-4 h-4" />
                   <span>Reviews</span>
-                </Link>
-                <Link
-                  to="/support"
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/support')}
                   className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${isActive('/support')
                     ? 'text-white bg-gray-900/50'
                     : 'text-gray-400 hover:text-white hover:bg-gray-900/30'
@@ -119,7 +128,7 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                 >
                   <FontAwesomeIcon icon={faQuestionCircle} className="w-4 h-4" />
                   <span>Support</span>
-                </Link>
+                </button>
               </nav>
             </nav>
           </div>
@@ -140,7 +149,12 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
 
             {/* Notifications */}
             <button
-              className="p-2 text-gray-400 hover:text-white hover:bg-gray-900/50 rounded-xl transition-all"
+              onClick={() => navigate('/notifications')}
+              className={`p-2 rounded-xl transition-all ${
+                location.pathname === '/notifications'
+                  ? 'bg-gray-900/60 text-white'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-900/50'
+              }`}
               aria-label="Notifications"
             >
               <FontAwesomeIcon icon={faBell} className="w-5 h-5" />
@@ -276,38 +290,38 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
           <div className="md:hidden fixed inset-x-0 top-[65px] p-4 z-40 animate-in slide-in-from-top duration-300">
             <div className="bg-gray-900/95 backdrop-blur-2xl border border-gray-800 rounded-3xl shadow-apple-2xl overflow-hidden ring-1 ring-white/5">
               <nav className="p-2 space-y-1">
-                <Link
-                  to="/"
-                  onClick={() => setShowMobileMenu(false)}
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/')}
                   className={`flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-base font-semibold transition-all ${isActive('/') ? 'bg-white text-black' : 'text-gray-300'}`}
                 >
                   <FontAwesomeIcon icon={faHome} className="w-5 h-5" />
                   <span>Home</span>
-                </Link>
-                <Link
-                  to="/discussions"
-                  onClick={() => setShowMobileMenu(false)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/discussions')}
                   className={`flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-base font-semibold transition-all ${isActive('/discussions') ? 'bg-white text-black' : 'text-gray-300'}`}
                 >
                   <FontAwesomeIcon icon={faComment} className="w-5 h-5" />
                   <span>Discussions</span>
-                </Link>
-                <Link
-                  to="/reviews"
-                  onClick={() => setShowMobileMenu(false)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/reviews')}
                   className={`flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-base font-semibold transition-all ${isActive('/reviews') ? 'bg-white text-black' : 'text-gray-300'}`}
                 >
                   <FontAwesomeIcon icon={faStar} className="w-5 h-5" />
                   <span>Reviews</span>
-                </Link>
-                <Link
-                  to="/support"
-                  onClick={() => setShowMobileMenu(false)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigateTo('/support')}
                   className={`flex items-center space-x-3 px-4 py-3.5 rounded-2xl text-base font-semibold transition-all ${isActive('/support') ? 'bg-white text-black' : 'text-gray-300'}`}
                 >
                   <FontAwesomeIcon icon={faQuestionCircle} className="w-5 h-5" />
                   <span>Support</span>
-                </Link>
+                </button>
               </nav>
 
               {/* Search in Mobile Menu */}
