@@ -188,6 +188,14 @@
         "nxtPid": "nxtPid"
       },
       "namedRegex": "^/api/v1/users/(?<nxtPid>[^/]+?)/posts(?:/)?$"
+    },
+    {
+      "page": "/[[...slug]]",
+      "regex": "^(?:/(.+?))?(?:/)?$",
+      "routeKeys": {
+        "nxtPslug": "nxtPslug"
+      },
+      "namedRegex": "^(?:/(?<nxtPslug>.+?))?(?:/)?$"
     }
   ],
   "staticRoutes": [

@@ -9,7 +9,7 @@
     "next-dev": "next dev",
     "build": "npm run build:web && npm run build:api",
     "build:web": "vite build",
-    "build:api": "next build",
+    "build:api": "next build --webpack",
     "start": "NODE_ENV=production node server.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",

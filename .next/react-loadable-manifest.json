@@ -1,0 +1,12 @@
+{
+  "app/ClientApp.tsx -> ../src/App": {
+    "id": 5380,
+    "files": [
+      "static/chunks/dd97b22d.a2b8d48f2a651ce5.js",
+      "static/chunks/870fdd6f.c04c615e811a6115.js",
+      "static/chunks/69b09407.c9d8ad0fa84ed2db.js",
+      "static/chunks/8530.8bf1a11df5d26148.js",
+      "static/chunks/5380.56d65cb52d7d4002.js"
+    ]
+  }
+}
