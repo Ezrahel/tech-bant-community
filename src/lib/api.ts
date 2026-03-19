@@ -1,5 +1,7 @@
 // API client for Next.js backend - Pure REST API
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+import { getApiBaseUrl } from './env';
+
+const API_BASE_URL = getApiBaseUrl();
 
 export interface ApiError {
   error: string;

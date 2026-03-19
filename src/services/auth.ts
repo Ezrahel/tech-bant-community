@@ -1,5 +1,6 @@
 // Authentication service using Node.js/Next.js backend API
 import { ApiRequestError, apiClient } from '../lib/api';
+import { getApiBaseUrl } from '../lib/env';
 import { ApiUserResponse, mapApiUserToUser } from '../lib/users';
 import { User } from '../types';
 
@@ -39,7 +40,7 @@ export interface ChangePasswordRequest {
 }
 
 class AuthService {
-  private readonly apiBaseURL = (import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
+  private readonly apiBaseURL = getApiBaseUrl();
 
   private setRefreshToken(token: string | null) {
     if (token) {
