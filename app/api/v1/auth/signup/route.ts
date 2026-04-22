@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent, setAuthCookies } from '@/lib/api-helpers';
-import { getSupabaseAdmin } from '@/lib/supabase';
+import { getSupabaseAdmin, getSupabaseAnon } from '@/lib/supabase';
 import { randomBytes } from 'crypto';
 import { validateSignupPayload } from '@/lib/validation';
 
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
         const { email, password, name } = validation.data;
 
         const supabase = getSupabaseAdmin();
+        const supabaseAnon = getSupabaseAnon();
         const ipAddress = getClientIP(req);
         const userAgent = getUserAgent(req);
 
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
             .from('users')
             .select('id')
             .eq('email', email)
-            .single();
+            .maybeSingle();
 
         if (existingUser) {
             console.log('User already exists in users table:', email);
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
         let accessToken = '';
         let supabaseRefreshToken = '';
         let accessTokenExpiresIn = 3600;
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error: signInError } = await supabaseAnon.auth.signInWithPassword({
             email,
             password
         });
@@ -70,30 +71,40 @@ export async function POST(req: NextRequest) {
 
         const now = new Date().toISOString();
         const avatar = 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop';
+        const profile = {
+            id: userID,
+            name,
+            email,
+            avatar,
+            is_admin: false,
+            is_verified: false,
+            is_active: true,
+            role: 'user',
+            provider: 'email',
+            posts_count: 0,
+            followers_count: 0,
+            following_count: 0,
+            created_at: now,
+            updated_at: now,
+        };
 
         // Create user profile
         const { error: profileError } = await supabase
             .from('users')
-            .insert({
-                id: userID,
-                name,
-                email,
-                avatar,
-                is_admin: false,
-                is_verified: false,
-                is_active: true,
-                role: 'user',
-                provider: 'email',
-                posts_count: 0,
-                followers_count: 0,
-                following_count: 0,
-                created_at: now,
-                updated_at: now,
-            });
+            .upsert(profile, { onConflict: 'id' });
 
         if (profileError) {
             console.error('Failed to create user profile:', profileError);
-            return errorResponse('Failed to create user profile', 500);
+
+            await supabase.auth.admin.deleteUser(userID).catch((cleanupError) => {
+                console.error('Failed to clean up auth user after profile creation error:', cleanupError);
+            });
+
+            if (profileError.code === '23505') {
+                return errorResponse('An account with this email already exists', 409);
+            }
+
+            return errorResponse(profileError.message || 'Failed to create user profile', 500);
         }
 
         // Create session
