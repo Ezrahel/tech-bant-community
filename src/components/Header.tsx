@@ -27,7 +27,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, userProfile } = useAuth();
+  const { user, userProfile, isAuthenticated } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [notifications, setNotifications] = useState(0);
 
@@ -149,13 +149,13 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
 
             {/* Notifications */}
             <button
-              onClick={() => navigate('/notifications')}
+              onClick={() => navigate(isAuthenticated ? '/notifications' : '/login')}
               className={`p-2 rounded-xl transition-all ${
                 location.pathname === '/notifications'
                   ? 'bg-gray-900/60 text-white'
                   : 'text-gray-400 hover:text-white hover:bg-gray-900/50'
               }`}
-              aria-label="Notifications"
+              aria-label={isAuthenticated ? 'Notifications' : 'Sign in for notifications'}
             >
               <FontAwesomeIcon icon={faBell} className="w-5 h-5" />
               {notifications > 0 && (
@@ -165,11 +165,11 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
 
             {/* New Post Button */}
             <button
-              onClick={() => navigate('/new-post')}
+              onClick={() => navigate(isAuthenticated ? '/new-post' : '/login')}
               className="flex items-center justify-center sm:space-x-2 bg-white text-black w-10 sm:w-auto h-10 sm:px-4 rounded-xl hover:bg-gray-100 active:scale-[0.98] transition-all text-sm font-bold shrink-0 shadow-apple-sm"
             >
               <FontAwesomeIcon icon={faPlus} className="w-5 h-5 sm:w-4 sm:h-4" />
-              <span className="hidden sm:inline">Post</span>
+              <span className="hidden sm:inline">{isAuthenticated ? 'Post' : 'Join'}</span>
             </button>
 
             {/* User Profile Menu */}
@@ -194,7 +194,6 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
               {showProfileMenu && (
                 <>
                   <div className="absolute right-0 mt-3 w-64 bg-gray-900/95 backdrop-blur-2xl border border-gray-800 rounded-2xl shadow-apple-2xl z-50 overflow-hidden ring-1 ring-white/5">
-                    {/* User Info */}
                     <div className="p-4 bg-white/5 border-b border-gray-800">
                       <div className="flex items-center space-x-3">
                         {userProfile?.avatar ? (
@@ -211,65 +210,79 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center space-x-1.5">
                             <p className="text-sm font-bold text-white truncate">
-                              {userProfile?.name || user?.name || 'User'}
+                              {isAuthenticated ? (userProfile?.name || user?.name || 'User') : 'Visitor mode'}
                             </p>
                             {userProfile?.isVerified && (
                               <FontAwesomeIcon icon={faCheckCircle} className="w-3.5 h-3.5 text-gray-400" />
                             )}
                           </div>
                           <p className="text-[10px] text-gray-500 truncate uppercase tracking-wider font-semibold">
-                            {user?.email || userProfile?.email}
+                            {isAuthenticated ? (user?.email || userProfile?.email) : 'Browse and share freely'}
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    {/* Menu Items */}
                     <div className="p-2">
-                      <button
-                        onClick={() => {
-                          navigate('/profile');
-                          setShowProfileMenu(false);
-                        }}
-                        className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/10 rounded-xl transition-all font-medium"
-                      >
-                        <FontAwesomeIcon icon={faUser} className="w-4 h-4 text-gray-400" />
-                        <span>Profile</span>
-                      </button>
+                      {isAuthenticated ? (
+                        <>
+                          <button
+                            onClick={() => {
+                              navigate('/profile');
+                              setShowProfileMenu(false);
+                            }}
+                            className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/10 rounded-xl transition-all font-medium"
+                          >
+                            <FontAwesomeIcon icon={faUser} className="w-4 h-4 text-gray-400" />
+                            <span>Profile</span>
+                          </button>
 
-                      <button
-                        onClick={() => {
-                          navigate('/profile?tab=settings');
-                          setShowProfileMenu(false);
-                        }}
-                        className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/10 rounded-xl transition-all font-medium"
-                      >
-                        <FontAwesomeIcon icon={faCog} className="w-4 h-4 text-gray-400" />
-                        <span>Settings</span>
-                      </button>
+                          <button
+                            onClick={() => {
+                              navigate('/profile?tab=settings');
+                              setShowProfileMenu(false);
+                            }}
+                            className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/10 rounded-xl transition-all font-medium"
+                          >
+                            <FontAwesomeIcon icon={faCog} className="w-4 h-4 text-gray-400" />
+                            <span>Settings</span>
+                          </button>
 
-                      {userProfile?.isAdmin && (
+                          {userProfile?.isAdmin && (
+                            <button
+                              onClick={() => {
+                                navigate('/admin');
+                                setShowProfileMenu(false);
+                              }}
+                              className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/10 rounded-xl transition-all font-medium"
+                            >
+                              <FontAwesomeIcon icon={faShieldAlt} className="w-4 h-4 text-gray-400" />
+                              <span>Admin Dashboard</span>
+                            </button>
+                          )}
+
+                          <div className="my-2 border-t border-gray-800/50 mx-2"></div>
+
+                          <button
+                            onClick={handleLogout}
+                            className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-bold"
+                          >
+                            <FontAwesomeIcon icon={faSignOutAlt} className="w-4 h-4" />
+                            <span>Sign out</span>
+                          </button>
+                        </>
+                      ) : (
                         <button
                           onClick={() => {
-                            navigate('/admin');
+                            navigate('/login');
                             setShowProfileMenu(false);
                           }}
                           className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm text-gray-300 hover:bg-white/10 rounded-xl transition-all font-medium"
                         >
-                          <FontAwesomeIcon icon={faShieldAlt} className="w-4 h-4 text-gray-400" />
-                          <span>Admin Dashboard</span>
+                          <FontAwesomeIcon icon={faUser} className="w-4 h-4 text-gray-400" />
+                          <span>Sign in</span>
                         </button>
                       )}
-
-                      <div className="my-2 border-t border-gray-800/50 mx-2"></div>
-
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center space-x-3 px-3 py-2.5 text-sm text-red-400 hover:bg-red-500/10 rounded-xl transition-all font-bold"
-                      >
-                        <FontAwesomeIcon icon={faSignOutAlt} className="w-4 h-4" />
-                        <span>Sign out</span>
-                      </button>
                     </div>
                   </div>
 

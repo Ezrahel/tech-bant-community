@@ -103,38 +103,22 @@ function AppContent() {
 
           <Route
             path="/profile/:userId"
-            element={
-              <ProtectedRoute>
-                <UserProfilePage />
-              </ProtectedRoute>
-            }
+            element={<ProtectedPageShell><UserProfilePage /></ProtectedPageShell>}
           />
 
           <Route
             path="/posts/:postId"
-            element={
-              <ProtectedRoute>
-                <PostDetailPage />
-              </ProtectedRoute>
-            }
+            element={<ProtectedPageShell><PostDetailPage /></ProtectedPageShell>}
           />
 
           <Route
             path="/discussions"
-            element={
-              <ProtectedRoute>
-                <DiscussionsPage />
-              </ProtectedRoute>
-            }
+            element={<ProtectedPageShell><DiscussionsPage /></ProtectedPageShell>}
           />
 
           <Route
             path="/reviews"
-            element={
-              <ProtectedRoute>
-                <ReviewsPage />
-              </ProtectedRoute>
-            }
+            element={<ProtectedPageShell><ReviewsPage /></ProtectedPageShell>}
           />
 
           <Route
@@ -148,11 +132,7 @@ function AppContent() {
 
           <Route
             path="/support"
-            element={
-              <ProtectedRoute>
-                <SupportPage />
-              </ProtectedRoute>
-            }
+            element={<ProtectedPageShell><SupportPage /></ProtectedPageShell>}
           />
 
           <Route

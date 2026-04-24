@@ -31,7 +31,7 @@ type TabType = 'posts' | 'likes' | 'media' | 'settings';
 const UserProfilePage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
-  const { userProfile: currentUserProfile, isAuthenticated } = useAuth();
+  const { userProfile: currentUserProfile } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('posts');

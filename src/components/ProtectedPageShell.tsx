@@ -6,6 +6,7 @@ import {
   Compass,
   Flame,
   HelpCircle,
+  LogIn,
   MessageSquare,
   PenSquare,
   Sparkles,
@@ -89,7 +90,7 @@ function getPageDetails(pathname: string) {
 
 const ProtectedPageShell: React.FC<ProtectedPageShellProps> = ({ children }) => {
   const location = useLocation();
-  const { userProfile } = useAuth();
+  const { userProfile, isAuthenticated } = useAuth();
   const profileStats = userProfile as (typeof userProfile & {
     posts_count?: number;
     followers_count?: number;
@@ -97,19 +98,31 @@ const ProtectedPageShell: React.FC<ProtectedPageShellProps> = ({ children }) => 
   }) | null;
   const details = getPageDetails(location.pathname);
 
-  const primaryLinks = [
-    { to: '/discussions', label: 'Discussions', icon: MessageSquare },
-    { to: '/reviews', label: 'Reviews', icon: Star },
-    { to: '/notifications', label: 'Notifications', icon: Bell },
-    { to: '/support', label: 'Support', icon: HelpCircle },
-    { to: '/profile', label: 'Profile', icon: UserCircle2 },
-  ];
+  const primaryLinks = isAuthenticated
+    ? [
+        { to: '/discussions', label: 'Discussions', icon: MessageSquare },
+        { to: '/reviews', label: 'Reviews', icon: Star },
+        { to: '/notifications', label: 'Notifications', icon: Bell },
+        { to: '/support', label: 'Support', icon: HelpCircle },
+        { to: '/profile', label: 'Profile', icon: UserCircle2 },
+      ]
+    : [
+        { to: '/discussions', label: 'Discussions', icon: MessageSquare },
+        { to: '/reviews', label: 'Reviews', icon: Star },
+        { to: '/support', label: 'Support', icon: HelpCircle },
+      ];
 
-  const quickLinks = [
-    { to: '/new-post', label: 'New Post', icon: PenSquare },
-    { to: '/profile?tab=settings', label: 'Settings', icon: ShieldCheck },
-    { to: '/reviews', label: 'Saved Reviews', icon: Bookmark },
-  ];
+  const quickLinks = isAuthenticated
+    ? [
+        { to: '/new-post', label: 'New Post', icon: PenSquare },
+        { to: '/profile?tab=settings', label: 'Settings', icon: ShieldCheck },
+        { to: '/reviews', label: 'Saved Reviews', icon: Bookmark },
+      ]
+    : [
+        { to: '/login', label: 'Sign In', icon: LogIn },
+        { to: '/signup', label: 'Create Account', icon: Sparkles },
+        { to: '/reviews', label: 'Browse Reviews', icon: Bookmark },
+      ];
 
   const isActive = (to: string) => {
     if (to === '/profile') return location.pathname.startsWith('/profile');
@@ -125,7 +138,11 @@ const ProtectedPageShell: React.FC<ProtectedPageShellProps> = ({ children }) => 
               <div className="min-w-0">
                 <div className="text-[10px] uppercase tracking-[0.2em] text-white/35">{details.kicker}</div>
                 <div className="mt-2 truncate text-xl font-semibold tracking-[-0.04em] text-white">{details.label}</div>
-                <p className="mt-2 text-sm leading-6 text-white/58">{details.note}</p>
+                <p className="mt-2 text-sm leading-6 text-white/58">
+                  {isAuthenticated
+                    ? details.note
+                    : `${details.note} Visitors can read and share, while posting and reactions stay locked behind sign-in.`}
+                </p>
               </div>
               {userProfile?.avatar ? (
                 <img
@@ -181,10 +198,12 @@ const ProtectedPageShell: React.FC<ProtectedPageShellProps> = ({ children }) => 
           <div className="surface-panel dot-noise overflow-hidden rounded-[2rem] p-6">
             <div className="relative z-10">
               <div className="flex items-center justify-between">
-                <div className="text-[11px] uppercase tracking-[0.24em] text-white/35">Signed in as</div>
+                <div className="text-[11px] uppercase tracking-[0.24em] text-white/35">
+                  {isAuthenticated ? 'Signed in as' : 'Visitor mode'}
+                </div>
                 <div className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] text-white/45">
                   <Sparkles className="h-3 w-3" />
-                  Live
+                  {isAuthenticated ? 'Live' : 'Read only'}
                 </div>
               </div>
               <div className="mt-4 flex items-center gap-3">
@@ -200,9 +219,11 @@ const ProtectedPageShell: React.FC<ProtectedPageShellProps> = ({ children }) => 
                 </div>
               )}
               <div className="min-w-0">
-                <div className="truncate text-base font-semibold tracking-[-0.02em] text-white">{userProfile?.name || 'Community Member'}</div>
+                <div className="truncate text-base font-semibold tracking-[-0.02em] text-white">
+                  {userProfile?.name || 'Community Visitor'}
+                </div>
                 <div className="mt-1 truncate text-xs uppercase tracking-[0.18em] text-white/38">
-                  {userProfile?.role?.replace('_', ' ') || 'member'}
+                  {userProfile?.role?.replace('_', ' ') || 'guest'}
                 </div>
               </div>
             </div>
@@ -220,6 +241,15 @@ const ProtectedPageShell: React.FC<ProtectedPageShellProps> = ({ children }) => 
                   <div className="mt-1 flex min-h-[1.5rem] items-center justify-center text-[9px] leading-3 tracking-[0.08em] text-white/35">FOLLOWING</div>
                 </div>
               </div>
+              {!isAuthenticated && (
+                <Link
+                  to="/signup"
+                  className="mt-5 inline-flex items-center justify-center gap-2 rounded-[1.25rem] bg-white px-4 py-3 text-sm font-semibold text-black transition-all hover:bg-neutral-200"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Join To Interact
+                </Link>
+              )}
             </div>
           </div>
 
@@ -270,7 +300,11 @@ const ProtectedPageShell: React.FC<ProtectedPageShellProps> = ({ children }) => 
             <div className="relative z-10">
             <div className="text-[11px] uppercase tracking-[0.24em] text-white/35">{details.kicker}</div>
             <h2 className="mt-3 text-[1.9rem] font-semibold tracking-[-0.05em] text-white">{details.label}</h2>
-            <p className="mt-3 text-sm leading-7 text-white/58">{details.note}</p>
+            <p className="mt-3 text-sm leading-7 text-white/58">
+              {isAuthenticated
+                ? details.note
+                : `${details.note} Read-only access stays open for visitors.`}
+            </p>
             <div className="surface-subtle mt-5 rounded-[1.5rem] p-4">
               <div className="flex items-center gap-2 text-sm font-semibold text-white">
                 <Zap className="h-4 w-4" />
@@ -320,7 +354,7 @@ const ProtectedPageShell: React.FC<ProtectedPageShellProps> = ({ children }) => 
               {notificationPreview.map((item) => (
                 <Link
                   key={item.title}
-                  to="/notifications"
+                  to={isAuthenticated ? '/notifications' : '/login'}
                   className="surface-subtle block rounded-[1.25rem] p-4 transition-all hover:bg-white/[0.06]"
                 >
                   <div className="text-sm font-medium text-white">{item.title}</div>

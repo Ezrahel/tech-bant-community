@@ -81,7 +81,6 @@ const PostDetailPage: React.FC = () => {
 
   const handleLike = async () => {
     if (!isAuthenticated) {
-      navigate('/login');
       return;
     }
 
@@ -102,7 +101,6 @@ const PostDetailPage: React.FC = () => {
 
   const handleBookmark = async () => {
     if (!isAuthenticated) {
-      navigate('/login');
       return;
     }
 
@@ -336,7 +334,10 @@ const PostDetailPage: React.FC = () => {
           <div className="flex items-center space-x-4 sm:space-x-6">
             <button
               onClick={handleLike}
-              className={`flex items-center space-x-1.5 sm:space-x-2 transition-colors ${liked ? 'text-white' : 'text-gray-500 hover:text-white'
+              disabled={!isAuthenticated}
+              title={isAuthenticated ? 'Like post' : 'Sign in to like posts'}
+              className={`flex items-center space-x-1.5 sm:space-x-2 transition-colors ${
+                liked ? 'text-white' : isAuthenticated ? 'text-gray-500 hover:text-white' : 'text-gray-600 cursor-not-allowed'
                 }`}
             >
               <FontAwesomeIcon icon={liked ? faHeartSolid : faHeartRegular} className={`w-4 h-4 sm:w-5 sm:h-5`} />
@@ -357,9 +358,13 @@ const PostDetailPage: React.FC = () => {
           <div className="flex items-center space-x-1 sm:space-x-2">
             <button
               onClick={handleBookmark}
+              disabled={!isAuthenticated}
+              title={isAuthenticated ? 'Save post' : 'Sign in to save posts'}
               className={`p-1.5 sm:p-2 rounded-xl transition-colors ${bookmarked
                 ? 'text-white bg-gray-800'
-                : 'text-gray-500 hover:text-white hover:bg-gray-800/50'
+                : isAuthenticated
+                  ? 'text-gray-500 hover:text-white hover:bg-gray-800/50'
+                  : 'text-gray-600 cursor-not-allowed'
                 }`}
             >
               <FontAwesomeIcon icon={bookmarked ? faBookmarkSolid : faBookmarkRegular} className={`w-4 h-4 sm:w-5 sm:h-5`} />
@@ -387,6 +392,12 @@ const PostDetailPage: React.FC = () => {
         <h2 className="text-lg sm:text-xl font-semibold text-white mb-6">
           Comments <span className="text-gray-500 ml-1">({comments.length})</span>
         </h2>
+
+        {!isAuthenticated && (
+          <div className="mb-6 rounded-2xl border border-gray-800/60 bg-gray-800/20 px-4 py-3 text-sm text-gray-400">
+            Visitors can read every comment and share this post. Sign in to post, like, bookmark, or comment.
+          </div>
+        )}
 
         {/* Comment Form */}
         {isAuthenticated ? (
@@ -491,11 +502,19 @@ const PostDetailPage: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-between mt-2 ml-1">
                     <div className="flex items-center space-x-4">
-                      <button className="flex items-center space-x-1 text-gray-500 hover:text-white transition-colors text-[10px] font-bold">
+                      <button
+                        disabled
+                        title="Comment reactions are available for signed-in members"
+                        className="flex items-center space-x-1 text-gray-600 cursor-not-allowed text-[10px] font-bold"
+                      >
                         <FontAwesomeIcon icon={faHeartRegular} className="w-3 h-3" />
                         <span>{comment.likes || 0}</span>
                       </button>
-                      <button className="text-gray-500 hover:text-white transition-colors text-[10px] font-bold uppercase tracking-widest">
+                      <button
+                        disabled
+                        title="Replies are available for signed-in members"
+                        className="text-gray-600 cursor-not-allowed text-[10px] font-bold uppercase tracking-widest"
+                      >
                         Reply
                       </button>
                     </div>

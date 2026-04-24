@@ -1,6 +1,11 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { categories as sampleCategories } from '@/src/data/sampleData';
+
+function isMissingPostsTableError(error: { code?: string; message?: string } | null | undefined) {
+    return error?.code === 'PGRST205' && error.message?.includes("table 'public.posts'");
+}
 
 // GET /api/v1/posts/categories
 export async function GET(req: NextRequest) {
@@ -13,6 +18,10 @@ export async function GET(req: NextRequest) {
             .select('category');
 
         if (error) {
+            if (isMissingPostsTableError(error)) {
+                console.warn('Falling back to sample categories because public.posts is missing from Supabase schema cache.');
+                return jsonResponse(sampleCategories);
+            }
             console.error('Error fetching categories:', error);
             return errorResponse('Failed to fetch category counts', 500);
         }

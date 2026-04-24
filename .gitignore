@@ -24,3 +24,5 @@ dist-ssr
 *.sw?
 .env
 server/tech-bant-community-firebase.json
+.next
+*.next

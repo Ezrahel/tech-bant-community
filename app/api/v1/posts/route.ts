@@ -4,6 +4,59 @@ import { syncUserPostsCount } from '@/lib/counters';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { createHash } from 'crypto';
 import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/lib/security';
+import { samplePosts } from '@/src/data/sampleData';
+
+function isMissingPostsTableError(error: { code?: string; message?: string } | null | undefined) {
+    return error?.code === 'PGRST205' && error.message?.includes("table 'public.posts'");
+}
+
+function buildSamplePostResponse() {
+    return samplePosts.map((post) => ({
+        id: post.id,
+        title: post.title,
+        content: post.content,
+        author_id: post.author.id,
+        author: {
+            id: post.author.id,
+            name: post.author.name,
+            email: post.author.email,
+            avatar: post.author.avatar,
+            is_admin: post.author.isAdmin,
+            is_verified: post.author.isVerified,
+            role: post.author.role || (post.author.isAdmin ? 'admin' : 'user'),
+            provider: post.author.provider || 'sample',
+            bio: post.author.bio || null,
+            location: post.author.location || null,
+            website: post.author.website || null,
+            posts_count: 0,
+            followers_count: 0,
+            following_count: 0,
+            created_at: post.author.createdAt || new Date().toISOString(),
+            updated_at: post.author.updatedAt || new Date().toISOString(),
+        },
+        category: post.category,
+        tags: post.tags,
+        likes: post.likes,
+        comments: post.comments,
+        views: post.views,
+        shares: post.shares,
+        is_pinned: post.isPinned || false,
+        is_hot: post.isHot || false,
+        is_liked: post.isLiked || false,
+        is_bookmarked: post.isBookmarked || false,
+        media: (post.media || []).map((item) => ({
+            id: item.id,
+            type: item.type,
+            url: item.url,
+            name: item.name,
+            size: item.size,
+        })),
+        location: null,
+        published_at: post.publishedAt,
+        created_at: post.publishedAt,
+        updated_at: post.publishedAt,
+    }));
+}
 
 // GET /posts - List posts (with optional category filter)
 export async function GET(req: NextRequest) {
@@ -15,11 +68,7 @@ export async function GET(req: NextRequest) {
 
         let query = supabase
             .from('posts')
-            .select(`
-                *,
-                author:users!author_id(${PUBLIC_USER_COLUMNS}),
-                media:media(id, type, url, name, size)
-            `)
+            .select('*')
             .order('created_at', { ascending: false })
             .range(offset, offset + limit - 1);
 
@@ -27,18 +76,92 @@ export async function GET(req: NextRequest) {
             query = query.eq('category', category);
         }
 
-        const { data: posts, error } = await query;
+        const { data: postsData, error } = await query;
         if (error) {
+            if (isMissingPostsTableError(error)) {
+                console.warn('Falling back to sample posts because public.posts is missing from Supabase schema cache.');
+                const fallbackPosts = buildSamplePostResponse();
+                return jsonResponse(
+                    category ? fallbackPosts.filter((post) => post.category === category) : fallbackPosts
+                );
+            }
             console.error('Supabase fetch posts error:', error);
             return errorResponse('Failed to fetch posts', 500);
         }
 
+        const posts = postsData || [];
+        const authorIDs = Array.from(new Set(posts.map((post) => post.author_id).filter(Boolean)));
+        const postIDs = posts.map((post) => post.id);
+
+        const [{ data: authors, error: authorsError }, { data: media, error: mediaError }] = await Promise.all([
+            authorIDs.length > 0
+                ? supabase.from('users').select(PUBLIC_USER_COLUMNS).in('id', authorIDs)
+                : Promise.resolve({ data: [], error: null }),
+            postIDs.length > 0
+                ? supabase.from('media').select('id, post_id, type, url, name, size').in('post_id', postIDs)
+                : Promise.resolve({ data: [], error: null }),
+        ]);
+
+        if (authorsError) {
+            console.error('Supabase fetch post authors error:', authorsError);
+            return errorResponse('Failed to fetch posts', 500);
+        }
+
+        if (mediaError) {
+            console.error('Supabase fetch post media error:', mediaError);
+            return errorResponse('Failed to fetch posts', 500);
+        }
+
+        const authorsByID = new Map((authors || []).map((author) => [author.id, author]));
+        const mediaByPostID = new Map<string, Array<{
+            id: string;
+            type: string;
+            url: string;
+            name: string | null;
+            size: number | null;
+        }>>();
+
+        for (const item of media || []) {
+            if (!item.post_id) continue;
+            const existing = mediaByPostID.get(item.post_id) || [];
+            existing.push({
+                id: item.id,
+                type: item.type,
+                url: item.url,
+                name: item.name,
+                size: item.size,
+            });
+            mediaByPostID.set(item.post_id, existing);
+        }
+
+        const hydratedPosts = posts.map((post) => ({
+            ...post,
+            author: authorsByID.get(post.author_id) || {
+                id: post.author_id,
+                name: 'Unknown user',
+                avatar: '',
+                bio: null,
+                location: null,
+                website: null,
+                is_admin: false,
+                is_verified: false,
+                role: 'user',
+                provider: 'email',
+                posts_count: 0,
+                followers_count: 0,
+                following_count: 0,
+                created_at: post.created_at,
+                updated_at: post.updated_at,
+            },
+            media: mediaByPostID.get(post.id) || [],
+        }));
+
         // Check for likes/bookmarks if user is authenticated
         const user = await getUserFromRequest(req);
-        let postsWithStatus = posts || [];
+        let postsWithStatus = hydratedPosts;
 
-        if (user && posts && posts.length > 0) {
-            const postIds = posts.map(p => p.id);
+        if (user && hydratedPosts.length > 0) {
+            const postIds = hydratedPosts.map((p) => p.id);
 
             const [{ data: userLikes }, { data: userBookmarks }] = await Promise.all([
                 supabase.from('likes').select('post_id').in('post_id', postIds).eq('user_id', user.id),
@@ -48,7 +171,7 @@ export async function GET(req: NextRequest) {
             const likedPostIds = new Set(userLikes?.map(l => l.post_id) || []);
             const bookmarkedPostIds = new Set(userBookmarks?.map(b => b.post_id) || []);
 
-            postsWithStatus = posts.map(post => ({
+            postsWithStatus = hydratedPosts.map(post => ({
                 ...post,
                 is_liked: likedPostIds.has(post.id),
                 is_bookmarked: bookmarkedPostIds.has(post.id)

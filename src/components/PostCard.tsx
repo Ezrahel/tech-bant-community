@@ -77,7 +77,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   const handleLike = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isAuthenticated) {
-      navigate('/login');
       return;
     }
 
@@ -101,7 +100,6 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   const handleBookmark = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isAuthenticated) {
-      navigate('/login');
       return;
     }
 
@@ -217,10 +215,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
             <div className="flex items-center space-x-4 sm:space-x-6">
               <button
                 onClick={handleLike}
-                disabled={loading}
+                disabled={loading || !isAuthenticated}
+                title={isAuthenticated ? 'Like post' : 'Sign in to like posts'}
                 className={`flex items-center space-x-1.5 sm:space-x-2 transition-all ${liked
                   ? 'text-white'
-                  : 'text-gray-500 hover:text-white'
+                  : isAuthenticated
+                    ? 'text-gray-500 hover:text-white'
+                    : 'text-gray-600 cursor-not-allowed'
                   }`}
               >
                 <FontAwesomeIcon icon={liked ? faHeartSolid : faHeartRegular} className={`w-3.5 h-3.5 sm:w-4 sm:h-4`} />
@@ -247,10 +248,13 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
             <div className="flex items-center space-x-1 sm:space-x-2">
               <button
                 onClick={handleBookmark}
-                disabled={loading}
+                disabled={loading || !isAuthenticated}
+                title={isAuthenticated ? 'Bookmark post' : 'Sign in to save posts'}
                 className={`p-1.5 sm:p-2 rounded-xl transition-all ${bookmarked
                   ? 'text-white bg-gray-800'
-                  : 'text-gray-500 hover:text-white hover:bg-gray-800/50'
+                  : isAuthenticated
+                    ? 'text-gray-500 hover:text-white hover:bg-gray-800/50'
+                    : 'text-gray-600 cursor-not-allowed'
                   }`}
               >
                 <FontAwesomeIcon icon={bookmarked ? faBookmarkSolid : faBookmarkRegular} className={`w-3.5 h-3.5 sm:w-4 sm:h-4`} />

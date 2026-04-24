@@ -1,4 +1,4 @@
-import { normalizeEmail, sanitizePlainText } from './security';
+import { normalizeEmail, sanitizePlainText } from './security.js';
 
 type ValidationSuccess<T> = { ok: true; data: T };
 type ValidationFailure = { ok: false; error: string };
@@ -33,6 +33,50 @@ export function validateSignupPayload(body: { email?: string; password?: string;
     if (!name) return { ok: false, error: 'Name is required' };
 
     return { ok: true, data: { email, password, name } };
+}
+
+export function validateAdminCreationPayload(
+    body: { email?: string; password?: string; name?: string; role?: string } | null
+): ValidationResult<{ email: string; password: string; name: string; role: 'admin' | 'super_admin' }> {
+    if (!body) return { ok: false, error: 'Invalid request body' };
+
+    const baseValidation = validateSignupPayload(body);
+    if (!baseValidation.ok) return baseValidation;
+
+    const role = body.role || 'admin';
+    if (role !== 'admin' && role !== 'super_admin') {
+        return { ok: false, error: 'Invalid role' };
+    }
+
+    return {
+        ok: true,
+        data: {
+            ...baseValidation.data,
+            role,
+        },
+    };
+}
+
+export function validateAdminBootstrapPayload(
+    body: { email?: string; password?: string; name?: string; secret?: string } | null
+): ValidationResult<{ email: string; password: string; name: string; secret: string }> {
+    if (!body) return { ok: false, error: 'Invalid request body' };
+
+    const baseValidation = validateSignupPayload(body);
+    if (!baseValidation.ok) return baseValidation;
+
+    const secret = body.secret?.trim() || '';
+    if (!secret) {
+        return { ok: false, error: 'Bootstrap secret is required' };
+    }
+
+    return {
+        ok: true,
+        data: {
+            ...baseValidation.data,
+            secret,
+        },
+    };
 }
 
 export function validateReportPayload(body: { post_id?: string; comment_id?: string; reason?: string } | null): ValidationResult<{ post_id?: string; comment_id?: string; reason: string }> {

@@ -3,6 +3,11 @@ import { jsonResponse, errorResponse, parseBody, withAuth, getUserFromRequest } 
 import { incrementPostViews, syncUserPostsCount } from '@/lib/counters';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/lib/security';
+import { samplePosts } from '@/src/data/sampleData';
+
+function isMissingPostsTableError(error: { code?: string; message?: string } | null | undefined) {
+    return error?.code === 'PGRST205' && error.message?.includes("table 'public.posts'");
+}
 
 // GET /posts/[id]
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -20,7 +25,43 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             .eq('id', id)
             .single();
 
-        if (error || !post) return errorResponse('Post not found', 404);
+        if (error || !post) {
+            if (isMissingPostsTableError(error)) {
+                const samplePost = samplePosts.find((item) => item.id === id);
+                if (!samplePost) return errorResponse('Post not found', 404);
+
+                return jsonResponse({
+                    id: samplePost.id,
+                    title: samplePost.title,
+                    content: samplePost.content,
+                    author_id: samplePost.author.id,
+                    author: {
+                        id: samplePost.author.id,
+                        name: samplePost.author.name,
+                        email: samplePost.author.email,
+                        avatar: samplePost.author.avatar,
+                        is_admin: samplePost.author.isAdmin,
+                        is_verified: samplePost.author.isVerified,
+                    },
+                    category: samplePost.category,
+                    tags: samplePost.tags,
+                    likes: samplePost.likes,
+                    comments: samplePost.comments,
+                    views: samplePost.views,
+                    shares: samplePost.shares,
+                    is_pinned: samplePost.isPinned || false,
+                    is_hot: samplePost.isHot || false,
+                    is_liked: samplePost.isLiked || false,
+                    is_bookmarked: samplePost.isBookmarked || false,
+                    media: samplePost.media || [],
+                    location: null,
+                    published_at: samplePost.publishedAt,
+                    created_at: samplePost.publishedAt,
+                    updated_at: samplePost.publishedAt,
+                });
+            }
+            return errorResponse('Post not found', 404);
+        }
 
         // Check if current user has liked/bookmarked if authenticated
         let isLiked = false;
