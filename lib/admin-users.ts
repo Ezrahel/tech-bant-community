@@ -1,5 +1,5 @@
 import { getSupabaseAdmin } from './supabase';
-import { normalizeEmail } from './security.js';
+import { normalizeEmail } from './security';
 
 export type AdminRole = 'admin' | 'super_admin';
 

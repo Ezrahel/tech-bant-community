@@ -5,8 +5,8 @@
     "outDir": ".tmp-tests",
     "rootDir": ".",
     "incremental": false,
-    "module": "ESNext",
-    "moduleResolution": "bundler",
+    "module": "CommonJS",
+    "moduleResolution": "node",
     "allowImportingTsExtensions": false,
     "declaration": false,
     "sourceMap": false

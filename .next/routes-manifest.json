@@ -22,6 +22,22 @@
   },
   "dynamicRoutes": [
     {
+      "page": "/api/v1/admin/admins/[id]",
+      "regex": "^/api/v1/admin/admins/([^/]+?)(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/v1/admin/admins/(?<nxtPid>[^/]+?)(?:/)?$"
+    },
+    {
+      "page": "/api/v1/admin/admins/[id]/role",
+      "regex": "^/api/v1/admin/admins/([^/]+?)/role(?:/)?$",
+      "routeKeys": {
+        "nxtPid": "nxtPid"
+      },
+      "namedRegex": "^/api/v1/admin/admins/(?<nxtPid>[^/]+?)/role(?:/)?$"
+    },
+    {
       "page": "/api/v1/admin/posts/[id]",
       "regex": "^/api/v1/admin/posts/([^/]+?)(?:/)?$",
       "routeKeys": {
@@ -216,6 +232,18 @@
       "regex": "^/api/health(?:/)?$",
       "routeKeys": {},
       "namedRegex": "^/api/health(?:/)?$"
+    },
+    {
+      "page": "/api/v1/admin/admins",
+      "regex": "^/api/v1/admin/admins(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/v1/admin/admins(?:/)?$"
+    },
+    {
+      "page": "/api/v1/admin/bootstrap",
+      "regex": "^/api/v1/admin/bootstrap(?:/)?$",
+      "routeKeys": {},
+      "namedRegex": "^/api/v1/admin/bootstrap(?:/)?$"
     },
     {
       "page": "/api/v1/admin/create",
