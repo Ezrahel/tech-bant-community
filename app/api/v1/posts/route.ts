@@ -7,7 +7,7 @@ import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/l
 import { samplePosts } from '@/src/data/sampleData';
 
 function isMissingPostsTableError(error: { code?: string; message?: string } | null | undefined) {
-    return error?.code === 'PGRST205' && error.message?.includes("table 'public.posts'");
+    return error?.code === 'PGRST205' || error?.code === '42P01' || error?.message?.includes('relation') === true;
 }
 
 function buildSamplePostResponse() {
@@ -181,7 +181,13 @@ export async function GET(req: NextRequest) {
         return jsonResponse(postsWithStatus);
     } catch (error: unknown) {
         console.error('Get posts error:', error);
-        return errorResponse('Internal server error', 500);
+        console.warn('Falling back to sample posts due to Supabase error.');
+        const url = new URL(req.url);
+        const category = url.searchParams.get('category');
+        const fallbackPosts = buildSamplePostResponse();
+        return jsonResponse(
+            category ? fallbackPosts.filter((post) => post.category === category) : fallbackPosts
+        );
     }
 }
 

@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody, withAdmin, paginationParams } from '@/lib/api-helpers';
-import { getSupabaseAdmin, getSupabaseURL, getSupabaseServiceKey, getSupabaseAnonKey } from '@/lib/supabase';
-import { randomBytes } from 'crypto';
+import { jsonResponse, errorResponse, withAdmin } from '@/lib/api-helpers';
+import { getSupabaseAdmin } from '@/lib/supabase';
 
 // GET /admin/stats
 export async function GET(req: NextRequest) {
@@ -20,6 +19,7 @@ export async function GET(req: NextRequest) {
             { count: totalPosts },
             { count: totalComments },
             { count: totalAdmins },
+            { count: activeUsers },
             { count: newUsersToday },
             { count: newPostsToday },
             { count: newCommentsToday },
@@ -31,6 +31,7 @@ export async function GET(req: NextRequest) {
             supabase.from('posts').select('*', { count: 'exact', head: true }),
             supabase.from('comments').select('*', { count: 'exact', head: true }),
             supabase.from('users').select('*', { count: 'exact', head: true }).in('role', ['admin', 'super_admin']),
+            supabase.from('users').select('*', { count: 'exact', head: true }).eq('is_active', true),
             supabase.from('users').select('*', { count: 'exact', head: true }).gte('created_at', todayISO),
             supabase.from('posts').select('*', { count: 'exact', head: true }).gte('created_at', todayISO),
             supabase.from('comments').select('*', { count: 'exact', head: true }).gte('created_at', todayISO),
@@ -44,7 +45,7 @@ export async function GET(req: NextRequest) {
             total_posts: totalPosts || 0,
             total_comments: totalComments || 0,
             total_admins: totalAdmins || 0,
-            active_users: totalUsers || 0,
+            active_users: activeUsers || 0,
             new_users_today: newUsersToday || 0,
             new_posts_today: newPostsToday || 0,
             new_comments_today: newCommentsToday || 0,

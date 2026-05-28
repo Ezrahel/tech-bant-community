@@ -51,9 +51,9 @@ const CommunityFeedPage: React.FC<CommunityFeedPageProps> = ({ mode }) => {
         : response.filter((post) => post.category !== 'reviews');
 
       setPosts(filteredPosts.map((post) => postsService.convertToPost(post)));
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(`Failed to load ${mode}:`, err);
-      setError(err.message || `Failed to load ${mode}`);
+      setError(err instanceof Error ? err.message : `Failed to load ${mode}`);
     } finally {
       setLoading(false);
     }
@@ -61,6 +61,7 @@ const CommunityFeedPage: React.FC<CommunityFeedPageProps> = ({ mode }) => {
 
   useEffect(() => {
     void loadPosts();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   return (

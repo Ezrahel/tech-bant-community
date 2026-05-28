@@ -18,7 +18,7 @@ export interface UserProfile extends User {
   join_date?: string;
 }
 
-export interface UserResponse extends ApiUserResponse {}
+export type UserResponse = ApiUserResponse;
 
 class UserService {
   // Get current user profile
@@ -40,12 +40,12 @@ class UserService {
   }
 
   // Get user posts
-  async getUserPosts(
+  async getUserPosts<T = Record<string, unknown>>(
     userId: string,
     limit = 20,
     offset = 0
-  ): Promise<any[]> {
-    return apiClient.get<any[]>(
+  ): Promise<T[]> {
+    return apiClient.get<T[]>(
       `/users/${userId}/posts?limit=${limit}&offset=${offset}`
     );
   }

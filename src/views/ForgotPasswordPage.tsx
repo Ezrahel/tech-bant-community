@@ -24,8 +24,8 @@ const ForgotPasswordPage: React.FC = () => {
       await authService.resetPassword(email);
       setStep('confirm');
       setSuccess('If the account exists, a reset code has been sent to your email.');
-    } catch (err: any) {
-      setError(err.message || 'Failed to send reset code');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to send reset code');
     } finally {
       setLoading(false);
     }
@@ -53,8 +53,8 @@ const ForgotPasswordPage: React.FC = () => {
       await authService.confirmPasswordReset(email, otpCode, newPassword);
       setSuccess('Password reset successfully. Redirecting to login...');
       setTimeout(() => navigate('/login', { replace: true }), 1500);
-    } catch (err: any) {
-      setError(err.message || 'Failed to reset password');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to reset password');
     } finally {
       setLoading(false);
     }

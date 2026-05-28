@@ -1,11 +1,11 @@
 // Posts service using Next.js backend API
 import { apiClient } from '../lib/api';
-import { Post, PostCategory, Category } from '../types';
+import { Post, Category } from '../types';
 
 export interface CreatePostData {
   title: string;
   content: string;
-  category: PostCategory;
+  category: string;
   tags: string[];
   location?: string;
   mediaIds?: string[];
@@ -127,7 +127,13 @@ class PostsService {
     name: string;
     size: number;
   }> {
-    return apiClient.uploadFile('/media/upload', file, onProgress);
+    return apiClient.uploadFile('/media/upload', file, onProgress) as Promise<{
+      id: string;
+      type: string;
+      url: string;
+      name: string;
+      size: number;
+    }>;
   }
 
   // Convert API response to Post type

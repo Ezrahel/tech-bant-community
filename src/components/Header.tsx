@@ -1,5 +1,5 @@
 // Header component with Apple design philosophy
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faSearch,
@@ -29,7 +29,7 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
   const location = useLocation();
   const { user, userProfile, isAuthenticated } = useAuth();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [notifications, setNotifications] = useState(0);
+  const [notifications] = useState(0);
 
   const handleLogout = async () => {
     try {

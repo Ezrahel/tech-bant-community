@@ -65,33 +65,12 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // Get CSRF token from cookie if available
-    // For first request, cookie might not exist yet, so we'll get it from response
-    const csrfToken = document.cookie
-      .split('; ')
-      .find(row => row.startsWith('csrf_token='))
-      ?.split('=')[1];
-
-    if (csrfToken) {
-      headers['X-CSRF-Token'] = csrfToken;
-    }
-
     try {
       const response = await fetch(url, {
         ...options,
         headers,
-        credentials: 'include', // Important for cookies to work
+        credentials: 'include',
       });
-
-      // Extract CSRF token from response cookies if not already set
-      const setCookieHeader = response.headers.get('Set-Cookie');
-      if (setCookieHeader && !csrfToken) {
-        const csrfMatch = setCookieHeader.match(/csrf_token=([^;]+)/);
-        if (csrfMatch && csrfMatch[1]) {
-          // Store for next request
-          document.cookie = `csrf_token=${csrfMatch[1]}; path=/; SameSite=Lax`;
-        }
-      }
 
       if (!response.ok) {
         const errorData: ApiError = await response.json().catch(() => ({
@@ -105,24 +84,12 @@ class ApiClient {
         );
       }
 
-      // Handle 204 No Content
       if (response.status === 204) {
         return {} as T;
       }
 
-      const data = await response.json();
-
-      // If response contains a token, store it
-      if (data.token) {
-        this.setAuthToken(data.token);
-      }
-      if (data.refreshToken) {
-        this.setRefreshToken(data.refreshToken);
-      }
-
-      return data;
-    } catch (error: any) {
-      // Handle network errors
+      return await response.json();
+    } catch (error: unknown) {
       if (error instanceof TypeError && error.message.includes('fetch')) {
         console.error('Network Error:', {
           url,
@@ -162,7 +129,7 @@ class ApiClient {
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
-  async uploadFile(endpoint: string, file: File, onProgress?: (progress: number) => void): Promise<any> {
+  async uploadFile(endpoint: string, file: File, onProgress?: (progress: number) => void): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const formData = new FormData();
@@ -175,13 +142,10 @@ class ApiClient {
         }
       });
 
-      xhr.addEventListener('load', async () => {
+      xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
           try {
             const response = JSON.parse(xhr.responseText);
-            if (response.token) {
-              localStorage.setItem('auth_token', response.token);
-            }
             resolve(response);
           } catch {
             resolve(xhr.responseText);
@@ -202,20 +166,9 @@ class ApiClient {
 
       xhr.open('POST', `${this.baseURL}${endpoint}`);
 
-      // Add auth token
       const token = this.getAuthToken();
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      }
-
-      // Get CSRF token
-      const csrfToken = document.cookie
-        .split('; ')
-        .find(row => row.startsWith('csrf_token='))
-        ?.split('=')[1];
-
-      if (csrfToken) {
-        xhr.setRequestHeader('X-CSRF-Token', csrfToken);
       }
 
       xhr.send(formData);

@@ -10,7 +10,6 @@ const ImageCollage: React.FC<ImageCollageProps> = ({ media, onImageClick }) => {
     if (!media || media.length === 0) return null;
 
     const count = media.length;
-    const images = media.slice(0, 4);
     const remainingCount = count - 4;
 
     const renderImage = (img: MediaAttachment, index: number, className: string) => (

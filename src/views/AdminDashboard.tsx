@@ -5,7 +5,6 @@ import {
   Star, 
   Shield, 
   Plus, 
-  Edit, 
   Trash2, 
   X,
   Crown,
@@ -64,9 +63,9 @@ const AdminDashboard: React.FC = () => {
       setFormData({ name: '', email: '', password: '', role: 'admin' });
       await loadDashboardData();
       toast.success('Admin created successfully!');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to create admin:', error);
-      toast.error(error.message || 'Failed to create admin. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to create admin. Please try again.');
     } finally {
       setCreateLoading(false);
     }
@@ -81,9 +80,9 @@ const AdminDashboard: React.FC = () => {
       await adminService.updateAdminRole(adminId, newRole);
       await loadDashboardData();
       toast.success('Admin role updated successfully!');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Failed to update admin role:', error);
-      toast.error(error.message || 'Failed to update admin role. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to update admin role. Please try again.');
     }
   };
 
@@ -97,9 +96,9 @@ const AdminDashboard: React.FC = () => {
         await adminService.deleteAdmin(adminId);
         await loadDashboardData();
         toast.success('Admin deleted successfully!');
-      } catch (error: any) {
+      } catch (error: unknown) {
         console.error('Failed to delete admin:', error);
-        toast.error(error.message || 'Failed to delete admin. Please try again.');
+        toast.error(error instanceof Error ? error.message : 'Failed to delete admin. Please try again.');
       }
     }
   };

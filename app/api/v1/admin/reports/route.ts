@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAdmin, paginationParams } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { sanitizePlainText } from '@/lib/security';
 import { validateReportPayload } from '@/lib/validation';
 
 // GET /admin/reports

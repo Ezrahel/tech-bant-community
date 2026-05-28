@@ -1,14 +1,13 @@
-import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { categories as sampleCategories } from '@/src/data/sampleData';
 
 function isMissingPostsTableError(error: { code?: string; message?: string } | null | undefined) {
-    return error?.code === 'PGRST205' && error.message?.includes("table 'public.posts'");
+    return error?.code === 'PGRST205' || error?.code === '42P01' || error?.message?.includes('relation') === true;
 }
 
 // GET /api/v1/posts/categories
-export async function GET(req: NextRequest) {
+export async function GET() {
     try {
         const supabase = getSupabaseAdmin();
 
@@ -49,6 +48,7 @@ export async function GET(req: NextRequest) {
         return jsonResponse(categories);
     } catch (error: unknown) {
         console.error('Get categories error:', error);
-        return errorResponse('Internal server error', 500);
+        console.warn('Falling back to sample categories due to Supabase error.');
+        return jsonResponse(sampleCategories);
     }
 }

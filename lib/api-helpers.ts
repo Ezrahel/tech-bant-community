@@ -183,3 +183,14 @@ export function getClientIP(req: NextRequest): string {
 export function getUserAgent(req: NextRequest): string {
     return req.headers.get('user-agent') || 'unknown';
 }
+
+export function getRolePermissions(role: string): string[] {
+    switch (role) {
+        case 'super_admin':
+            return ['read', 'write', 'delete', 'admin', 'manage_admins', 'manage_roles', 'view_analytics'];
+        case 'admin':
+            return ['read', 'write', 'delete', 'admin', 'view_analytics'];
+        default:
+            return ['read', 'write'];
+    }
+}

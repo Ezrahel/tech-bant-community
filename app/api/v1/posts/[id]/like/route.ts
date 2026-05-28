@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, withAuth } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { queryOptional } from '@/lib/db';
 
 // POST /posts/[id]/like - Toggle like
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -12,7 +13,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
         const supabase = getSupabaseAdmin();
 
-        // Check if already liked
         const { data: existingLike } = await supabase
             .from('likes')
             .select('id')
@@ -20,39 +20,44 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
             .eq('user_id', user.id)
             .single();
 
-        if (existingLike) {
-            // Unlike
-            await supabase.from('likes').delete().eq('id', existingLike.id);
+        const isLiking = !existingLike;
+        const now = new Date().toISOString();
 
-            // Atomic decrement using raw SQL is not directly supported via JS client easily without RPC
-            // But we can at least do it more safely by using a single update call with a subquery if possible
-            // In the absence of RPC, we'll keep the current logic but wrap it in a more robust way if possible
-            // For now, let's stick to a slightly better approach or suggest an RPC
-            const { data: post } = await supabase.from('posts').select('likes').eq('id', postId).single();
-            await supabase.from('posts').update({
-                likes: Math.max(0, (post?.likes || 0) - 1),
-                updated_at: new Date().toISOString()
-            }).eq('id', postId);
-
-            return jsonResponse({ message: 'Post unliked', liked: false, likes: Math.max(0, (post?.likes || 0) - 1) });
-        } else {
-            // Like
+        if (isLiking) {
             await supabase.from('likes').insert({
                 post_id: postId,
                 user_id: user.id,
-                created_at: new Date().toISOString(),
+                created_at: now,
             });
-
-            // Increment count
-            const { data: post } = await supabase.from('posts').select('likes').eq('id', postId).single();
-            const newCount = (post?.likes || 0) + 1;
-            await supabase.from('posts').update({
-                likes: newCount,
-                updated_at: new Date().toISOString()
-            }).eq('id', postId);
-
-            return jsonResponse({ message: 'Post liked', liked: true, likes: newCount });
+        } else {
+            await supabase.from('likes').delete().eq('id', existingLike.id);
         }
+
+        // Atomic counter update via direct SQL
+        const delta = isLiking ? 1 : -1;
+        const result = await queryOptional<{ likes: number }>(
+            `UPDATE public.posts SET likes = GREATEST(0, likes + $1::int), updated_at = $2::timestamptz WHERE id = $3::uuid RETURNING likes`,
+            [delta, now, postId]
+        );
+
+        let finalLikes: number;
+        if (result?.rows[0]?.likes !== undefined) {
+            finalLikes = result.rows[0].likes;
+        } else {
+            // Fallback: use Supabase REST (non-atomic but required if direct DB unavailable)
+            const { data: post } = await supabase.from('posts').select('likes').eq('id', postId).single();
+            finalLikes = Math.max(0, (post?.likes || 0) + delta);
+            await supabase.from('posts').update({
+                likes: finalLikes,
+                updated_at: now,
+            }).eq('id', postId);
+        }
+
+        return jsonResponse({
+            message: isLiking ? 'Post liked' : 'Post unliked',
+            liked: isLiking,
+            likes: finalLikes,
+        });
     } catch (error: unknown) {
         console.error('Like post error:', error);
         return errorResponse('Internal server error', 500);

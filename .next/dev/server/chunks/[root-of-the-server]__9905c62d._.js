@@ -64,7 +64,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2
 let adminClient = null;
 function getSupabaseAdmin() {
     if (!adminClient) {
-        const url = ("TURBOPACK compile-time value", "https://pwaoarutecglttcuqyen.supabase.co");
+        const url = ("TURBOPACK compile-time value", "https://fflybowoemzeiqyrenbj.supabase.co");
         const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         if (!url || !serviceKey) {
             throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
@@ -82,8 +82,8 @@ function getSupabaseAdmin() {
 let anonClient = null;
 function getSupabaseAnon() {
     if (!anonClient) {
-        const url = ("TURBOPACK compile-time value", "https://pwaoarutecglttcuqyen.supabase.co");
-        const anonKey = ("TURBOPACK compile-time value", "sb_publishable_ru9zRYWtaZ0jyhQoKS3aEA_tWKWx6LQ");
+        const url = ("TURBOPACK compile-time value", "https://fflybowoemzeiqyrenbj.supabase.co");
+        const anonKey = ("TURBOPACK compile-time value", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmbHlib3dvZW16ZWlxeXJlbmJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzMTU1NTcsImV4cCI6MjA4NDg5MTU1N30.GJXWkiH9yBdNr-hGqJe3nxASt18Mk04mUfEp-UYkgBk");
         if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
         ;
         anonClient = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$index$2e$mjs__$5b$app$2d$route$5d$__$28$ecmascript$29$__$3c$locals$3e$__["createClient"])(url, anonKey, {
@@ -96,13 +96,13 @@ function getSupabaseAnon() {
     return anonClient;
 }
 function getSupabaseURL() {
-    return "TURBOPACK compile-time value", "https://pwaoarutecglttcuqyen.supabase.co";
+    return "TURBOPACK compile-time value", "https://fflybowoemzeiqyrenbj.supabase.co";
 }
 function getSupabaseServiceKey() {
     return process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 function getSupabaseAnonKey() {
-    return "TURBOPACK compile-time value", "sb_publishable_ru9zRYWtaZ0jyhQoKS3aEA_tWKWx6LQ";
+    return "TURBOPACK compile-time value", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmbHlib3dvZW16ZWlxeXJlbmJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzMTU1NTcsImV4cCI6MjA4NDg5MTU1N30.GJXWkiH9yBdNr-hGqJe3nxASt18Mk04mUfEp-UYkgBk";
 }
 function getStorageBucket() {
     return process.env.SUPABASE_STORAGE_BUCKET || 'media';
@@ -122,6 +122,8 @@ __turbopack_context__.s([
     ()=>errorResponse,
     "getClientIP",
     ()=>getClientIP,
+    "getRolePermissions",
+    ()=>getRolePermissions,
     "getUserAgent",
     ()=>getUserAgent,
     "getUserFromRequest",
@@ -280,6 +282,33 @@ function getClientIP(req) {
 }
 function getUserAgent(req) {
     return req.headers.get('user-agent') || 'unknown';
+}
+function getRolePermissions(role) {
+    switch(role){
+        case 'super_admin':
+            return [
+                'read',
+                'write',
+                'delete',
+                'admin',
+                'manage_admins',
+                'manage_roles',
+                'view_analytics'
+            ];
+        case 'admin':
+            return [
+                'read',
+                'write',
+                'delete',
+                'admin',
+                'view_analytics'
+            ];
+        default:
+            return [
+                'read',
+                'write'
+            ];
+    }
 }
 }),
 "[project]/app/api/v1/auth/verify/route.ts [app-route] (ecmascript)", ((__turbopack_context__) => {

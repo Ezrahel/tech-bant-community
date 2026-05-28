@@ -1,4 +1,7 @@
 {
+  "/[[...slug]]/page": "/[[...slug]]",
+  "/_global-error/page": "/_global-error",
+  "/_not-found/page": "/_not-found",
   "/api/health/route": "/api/health",
   "/api/v1/admin/admins/[id]/role/route": "/api/v1/admin/admins/[id]/role",
   "/api/v1/admin/admins/[id]/route": "/api/v1/admin/admins/[id]",
@@ -36,6 +39,9 @@
   "/api/v1/media/[id]/route": "/api/v1/media/[id]",
   "/api/v1/media/upload/route": "/api/v1/media/upload",
   "/api/v1/posts/[id]/bookmark/route": "/api/v1/posts/[id]/bookmark",
+  "/api/v1/posts/[id]/comments/route": "/api/v1/posts/[id]/comments",
+  "/api/v1/posts/[id]/like/route": "/api/v1/posts/[id]/like",
+  "/api/v1/posts/[id]/route": "/api/v1/posts/[id]",
   "/api/v1/posts/[id]/share/route": "/api/v1/posts/[id]/share",
   "/api/v1/posts/categories/route": "/api/v1/posts/categories",
   "/api/v1/posts/route": "/api/v1/posts",
@@ -46,11 +52,5 @@
   "/api/v1/users/[id]/route": "/api/v1/users/[id]",
   "/api/v1/users/me/bookmarks/route": "/api/v1/users/me/bookmarks",
   "/api/v1/users/me/route": "/api/v1/users/me",
-  "/api/v1/users/search/route": "/api/v1/users/search",
-  "/api/v1/posts/[id]/route": "/api/v1/posts/[id]",
-  "/api/v1/posts/[id]/comments/route": "/api/v1/posts/[id]/comments",
-  "/api/v1/posts/[id]/like/route": "/api/v1/posts/[id]/like",
-  "/_global-error/page": "/_global-error",
-  "/_not-found/page": "/_not-found",
-  "/[[...slug]]/page": "/[[...slug]]"
+  "/api/v1/users/search/route": "/api/v1/users/search"
 }

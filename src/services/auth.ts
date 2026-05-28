@@ -77,9 +77,9 @@ class AuthService {
         name: data.name,
       });
       return this.persistAuthResponse(response);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Signup error:', error);
-      throw new Error(error.message || 'Failed to sign up');
+      throw new Error(error instanceof Error ? error.message : 'Failed to sign up');
     }
   }
 
@@ -92,9 +92,9 @@ class AuthService {
         otpCode: data.otpCode,
       });
       return this.persistAuthResponse(response);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Login error:', error);
-      throw new Error(error.message || 'Invalid credentials');
+      throw new Error(error instanceof Error ? error.message : 'Invalid credentials');
     }
   }
 
@@ -112,9 +112,9 @@ class AuthService {
       }
 
       window.location.href = data.auth_url;
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Google login error:', error);
-      throw new Error(error.message || 'Failed to sign in with Google');
+      throw new Error(error instanceof Error ? error.message : 'Failed to sign in with Google');
     }
   }
 
@@ -126,7 +126,6 @@ class AuthService {
       apiClient.clearAuthToken();
     } catch (error) {
       console.error('Logout error:', error);
-      // Still clear token even if backend call fails
       apiClient.clearAuthToken();
     }
   }
@@ -138,20 +137,19 @@ class AuthService {
         currentPassword: data.currentPassword,
         newPassword: data.newPassword,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Change password error:', error);
-      throw new Error(error.message || 'Failed to change password');
+      throw new Error(error instanceof Error ? error.message : 'Failed to change password');
     }
   }
 
   // Reset password - request OTP
   async resetPassword(email: string): Promise<void> {
     try {
-      // Backend sends OTP to email
       await apiClient.post('/auth/reset-password', { email });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Reset password error:', error);
-      throw new Error(error.message || 'Failed to send password reset email');
+      throw new Error(error instanceof Error ? error.message : 'Failed to send password reset email');
     }
   }
 
@@ -163,9 +161,9 @@ class AuthService {
         otpCode,
         newPassword,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Confirm password reset error:', error);
-      throw new Error(error.message || 'Failed to reset password');
+      throw new Error(error instanceof Error ? error.message : 'Failed to reset password');
     }
   }
 
@@ -178,7 +176,7 @@ class AuthService {
     try {
       const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
       return mapApiUserToUser(response.user);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (refreshToken) {
         try {
           await this.refreshStoredSession();
@@ -215,9 +213,9 @@ class AuthService {
         refreshToken,
       });
       return this.persistAuthResponse(response);
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Refresh token error:', error);
-      throw new Error(error.message || 'Failed to refresh token');
+      throw new Error(error instanceof Error ? error.message : 'Failed to refresh token');
     }
   }
 

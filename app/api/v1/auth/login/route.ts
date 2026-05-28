@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent, setAuthCookies } from '@/lib/api-helpers';
+import { jsonResponse, errorResponse, parseBody, getClientIP, getUserAgent, setAuthCookies, getRolePermissions } from '@/lib/api-helpers';
 import { getSupabaseAdmin, getSupabaseURL, getSupabaseAnonKey } from '@/lib/supabase';
 import { randomBytes } from 'crypto';
-import { issueEmailOTP, normalizeEmail, verifyOTPCode } from '@/lib/security';
+import { issueEmailOTP, verifyOTPCode } from '@/lib/security';
 import { validateLoginPayload } from '@/lib/validation';
 
 export async function POST(req: NextRequest) {
@@ -188,13 +188,4 @@ export async function POST(req: NextRequest) {
     }
 }
 
-function getRolePermissions(role: string): string[] {
-    switch (role) {
-        case 'super_admin':
-            return ['read', 'write', 'delete', 'admin', 'manage_admins', 'manage_roles', 'view_analytics'];
-        case 'admin':
-            return ['read', 'write', 'delete', 'admin', 'view_analytics'];
-        default:
-            return ['read', 'write'];
-    }
-}
+

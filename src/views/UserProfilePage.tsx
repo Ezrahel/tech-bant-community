@@ -11,16 +11,12 @@ import {
   Camera,
   Save,
   X,
-  Heart,
-  Image,
   MessageSquare,
-  MoreHorizontal,
-  Share2,
   CheckCircle2,
   Shield,
 } from 'lucide-react';
 import { userService, UpdateProfileData } from '../services/user';
-import { postsService } from '../services/posts';
+import { PostResponse, postsService } from '../services/posts';
 import { UserProfile } from '../services/user';
 import { Post } from '../types';
 import PostCard from '../components/PostCard';
@@ -39,8 +35,6 @@ const UserProfilePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
-
   const isCurrentUser = !userId || userId === currentUserProfile?.id;
 
   const [editForm, setEditForm] = useState<UpdateProfileData>({
@@ -53,6 +47,7 @@ const UserProfilePage: React.FC = () => {
 
   useEffect(() => {
     loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
   const loadProfile = async () => {
@@ -80,8 +75,8 @@ const UserProfilePage: React.FC = () => {
 
         // Load user posts
         try {
-          const posts = await userService.getUserPosts(userProfile.id);
-          const convertedPosts = posts.map((p: any) => postsService.convertToPost(p));
+          const posts = await userService.getUserPosts<PostResponse>(userProfile.id);
+          const convertedPosts = posts.map((p) => postsService.convertToPost(p));
           setUserPosts(convertedPosts);
         } catch (postsError) {
           console.error('Failed to load user posts:', postsError);
@@ -90,9 +85,9 @@ const UserProfilePage: React.FC = () => {
       } else {
         setError('Profile not found');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Load profile error:', err);
-      setError(err.message || 'Failed to load profile');
+      setError(err instanceof Error ? err.message : 'Failed to load profile');
     } finally {
       setLoading(false);
     }
@@ -111,9 +106,9 @@ const UserProfilePage: React.FC = () => {
       setSuccess('Profile updated successfully!');
 
       setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Update profile error:', err);
-      setError(err.message || 'Failed to update profile');
+      setError(err instanceof Error ? err.message : 'Failed to update profile');
     }
   };
 

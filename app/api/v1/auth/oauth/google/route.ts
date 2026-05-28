@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse } from '@/lib/api-helpers';
-import { getSupabaseAdmin, getSupabaseURL, getSupabaseAnonKey } from '@/lib/supabase';
+import { getSupabaseAdmin, getSupabaseURL } from '@/lib/supabase';
 import { randomBytes } from 'crypto';
 
 // GET /auth/oauth/google - Initiate Google OAuth
@@ -16,7 +16,6 @@ export async function GET(req: NextRequest) {
         }
 
         const supabaseURL = getSupabaseURL();
-        const anonKey = getSupabaseAnonKey();
 
         // Generate state for CSRF protection
         const state = randomBytes(32).toString('base64url');

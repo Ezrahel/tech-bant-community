@@ -4,7 +4,6 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import {
   faTimes,
   faChevronDown,
-  faImage,
   faFilm,
   faUpload,
   faMapPin,
@@ -42,7 +41,8 @@ const NewPostPage: React.FC = () => {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const getCategoryColor = (cat: string) => {
+  const getCategoryColor = (_cat: string) => {
+    void _cat;
     return 'text-gray-400';
   };
 
@@ -76,8 +76,8 @@ const NewPostPage: React.FC = () => {
           continue;
         }
 
-        const uploaded = await postsService.uploadMedia(file, (progress) => {
-          // Progress callback
+        const uploaded = await postsService.uploadMedia(file, (_progress: number) => {
+          void _progress;
         });
 
         setMedia((prev) => [
@@ -90,8 +90,8 @@ const NewPostPage: React.FC = () => {
           },
         ]);
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to upload media');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to upload media');
     } finally {
       setUploading(false);
     }
@@ -128,15 +128,15 @@ const NewPostPage: React.FC = () => {
       await postsService.createPost({
         title: title.trim(),
         content: content.trim(),
-        category: category as any,
+        category: category,
         tags,
         location: location || undefined,
         mediaIds: media.map((m) => m.id),
       });
 
       navigate('/', { replace: true });
-    } catch (err: any) {
-      setError(err.message || 'Failed to create post');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to create post');
     } finally {
       setIsPosting(false);
     }

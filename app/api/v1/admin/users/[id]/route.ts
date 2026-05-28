@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { jsonResponse, errorResponse, parseBody, withAdmin, withSuperAdmin } from '@/lib/api-helpers';
+import { jsonResponse, errorResponse, parseBody, withSuperAdmin } from '@/lib/api-helpers';
 import { getSupabaseAdmin, getSupabaseURL, getSupabaseServiceKey } from '@/lib/supabase';
 
 // PUT /admin/users/[id]

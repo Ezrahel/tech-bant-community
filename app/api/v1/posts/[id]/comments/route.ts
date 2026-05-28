@@ -20,16 +20,22 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
         if (error) return errorResponse('Failed to fetch comments', 500);
 
-        // Get likes count for each comment
-        const commentsWithLikes = await Promise.all(
-            (comments || []).map(async (comment) => {
-                const { count } = await supabase
-                    .from('likes')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('comment_id', comment.id);
-                return { ...comment, likes: count || 0 };
-            })
-        );
+        const commentList = comments || [];
+        const likesMap = new Map<string, number>();
+        if (commentList.length > 0) {
+            const commentIds = commentList.map(c => c.id);
+            const { data: likesData } = await supabase
+                .from('likes')
+                .select('comment_id')
+                .in('comment_id', commentIds);
+            for (const like of likesData || []) {
+                likesMap.set(like.comment_id, (likesMap.get(like.comment_id) || 0) + 1);
+            }
+        }
+        const commentsWithLikes = commentList.map(comment => ({
+            ...comment,
+            likes: likesMap.get(comment.id) || 0,
+        }));
 
         return jsonResponse(commentsWithLikes);
     } catch (error: unknown) {

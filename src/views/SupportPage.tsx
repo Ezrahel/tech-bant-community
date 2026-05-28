@@ -1,10 +1,10 @@
 // Support page with Apple design philosophy
 import React, { useState } from 'react';
-import { HelpCircle, Mail, MessageSquare, Book, AlertCircle, Send, CheckCircle2 } from 'lucide-react';
+import { HelpCircle, Mail, MessageSquare, AlertCircle, Send, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const SupportPage: React.FC = () => {
-  const { isAuthenticated, userProfile } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [category, setCategory] = useState('general');

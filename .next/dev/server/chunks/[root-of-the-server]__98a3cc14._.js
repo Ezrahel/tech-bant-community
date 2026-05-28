@@ -64,7 +64,7 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2
 let adminClient = null;
 function getSupabaseAdmin() {
     if (!adminClient) {
-        const url = ("TURBOPACK compile-time value", "https://pwaoarutecglttcuqyen.supabase.co");
+        const url = ("TURBOPACK compile-time value", "https://fflybowoemzeiqyrenbj.supabase.co");
         const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         if (!url || !serviceKey) {
             throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
@@ -82,8 +82,8 @@ function getSupabaseAdmin() {
 let anonClient = null;
 function getSupabaseAnon() {
     if (!anonClient) {
-        const url = ("TURBOPACK compile-time value", "https://pwaoarutecglttcuqyen.supabase.co");
-        const anonKey = ("TURBOPACK compile-time value", "sb_publishable_ru9zRYWtaZ0jyhQoKS3aEA_tWKWx6LQ");
+        const url = ("TURBOPACK compile-time value", "https://fflybowoemzeiqyrenbj.supabase.co");
+        const anonKey = ("TURBOPACK compile-time value", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmbHlib3dvZW16ZWlxeXJlbmJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzMTU1NTcsImV4cCI6MjA4NDg5MTU1N30.GJXWkiH9yBdNr-hGqJe3nxASt18Mk04mUfEp-UYkgBk");
         if ("TURBOPACK compile-time falsy", 0) //TURBOPACK unreachable
         ;
         anonClient = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f40$supabase$2f$supabase$2d$js$2f$dist$2f$index$2e$mjs__$5b$app$2d$route$5d$__$28$ecmascript$29$__$3c$locals$3e$__["createClient"])(url, anonKey, {
@@ -96,13 +96,13 @@ function getSupabaseAnon() {
     return anonClient;
 }
 function getSupabaseURL() {
-    return "TURBOPACK compile-time value", "https://pwaoarutecglttcuqyen.supabase.co";
+    return "TURBOPACK compile-time value", "https://fflybowoemzeiqyrenbj.supabase.co";
 }
 function getSupabaseServiceKey() {
     return process.env.SUPABASE_SERVICE_ROLE_KEY;
 }
 function getSupabaseAnonKey() {
-    return "TURBOPACK compile-time value", "sb_publishable_ru9zRYWtaZ0jyhQoKS3aEA_tWKWx6LQ";
+    return "TURBOPACK compile-time value", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmbHlib3dvZW16ZWlxeXJlbmJqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjkzMTU1NTcsImV4cCI6MjA4NDg5MTU1N30.GJXWkiH9yBdNr-hGqJe3nxASt18Mk04mUfEp-UYkgBk";
 }
 function getStorageBucket() {
     return process.env.SUPABASE_STORAGE_BUCKET || 'media';
@@ -122,6 +122,8 @@ __turbopack_context__.s([
     ()=>errorResponse,
     "getClientIP",
     ()=>getClientIP,
+    "getRolePermissions",
+    ()=>getRolePermissions,
     "getUserAgent",
     ()=>getUserAgent,
     "getUserFromRequest",
@@ -280,6 +282,33 @@ function getClientIP(req) {
 }
 function getUserAgent(req) {
     return req.headers.get('user-agent') || 'unknown';
+}
+function getRolePermissions(role) {
+    switch(role){
+        case 'super_admin':
+            return [
+                'read',
+                'write',
+                'delete',
+                'admin',
+                'manage_admins',
+                'manage_roles',
+                'view_analytics'
+            ];
+        case 'admin':
+            return [
+                'read',
+                'write',
+                'delete',
+                'admin',
+                'view_analytics'
+            ];
+        default:
+            return [
+                'read',
+                'write'
+            ];
+    }
 }
 }),
 "[externals]/crypto [external] (crypto, cjs)", ((__turbopack_context__, module, exports) => {
@@ -524,6 +553,10 @@ async function verifyOTPCode(supabase, params) {
 "use strict";
 
 __turbopack_context__.s([
+    "validateAdminBootstrapPayload",
+    ()=>validateAdminBootstrapPayload,
+    "validateAdminCreationPayload",
+    ()=>validateAdminCreationPayload,
     "validateLoginPayload",
     ()=>validateLoginPayload,
     "validateReportPayload",
@@ -531,18 +564,14 @@ __turbopack_context__.s([
     "validateSignupPayload",
     ()=>validateSignupPayload
 ]);
-(()=>{
-    const e = new Error("Cannot find module './security.js'");
-    e.code = 'MODULE_NOT_FOUND';
-    throw e;
-})();
+var __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$security$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/lib/security.ts [app-route] (ecmascript)");
 ;
 function validateLoginPayload(body) {
     if (!body) return {
         ok: false,
         error: 'Invalid request body'
     };
-    const email = normalizeEmail(body.email || '');
+    const email = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$security$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["normalizeEmail"])(body.email || '');
     if (!email || !email.includes('@')) return {
         ok: false,
         error: 'Valid email is required'
@@ -571,7 +600,7 @@ function validateSignupPayload(body) {
         ok: false,
         error: 'Invalid request body'
     };
-    const email = normalizeEmail(body.email || '');
+    const email = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$security$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["normalizeEmail"])(body.email || '');
     if (!email || !email.includes('@')) return {
         ok: false,
         error: 'Valid email is required'
@@ -581,7 +610,7 @@ function validateSignupPayload(body) {
         ok: false,
         error: 'Password must be at least 8 characters'
     };
-    const name = sanitizePlainText(body.name || '', 100);
+    const name = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$security$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["sanitizePlainText"])(body.name || '', 100);
     if (!name) return {
         ok: false,
         error: 'Name is required'
@@ -595,12 +624,56 @@ function validateSignupPayload(body) {
         }
     };
 }
+function validateAdminCreationPayload(body) {
+    if (!body) return {
+        ok: false,
+        error: 'Invalid request body'
+    };
+    const baseValidation = validateSignupPayload(body);
+    if (!baseValidation.ok) return baseValidation;
+    const role = body.role || 'admin';
+    if (role !== 'admin' && role !== 'super_admin') {
+        return {
+            ok: false,
+            error: 'Invalid role'
+        };
+    }
+    return {
+        ok: true,
+        data: {
+            ...baseValidation.data,
+            role
+        }
+    };
+}
+function validateAdminBootstrapPayload(body) {
+    if (!body) return {
+        ok: false,
+        error: 'Invalid request body'
+    };
+    const baseValidation = validateSignupPayload(body);
+    if (!baseValidation.ok) return baseValidation;
+    const secret = body.secret?.trim() || '';
+    if (!secret) {
+        return {
+            ok: false,
+            error: 'Bootstrap secret is required'
+        };
+    }
+    return {
+        ok: true,
+        data: {
+            ...baseValidation.data,
+            secret
+        }
+    };
+}
 function validateReportPayload(body) {
     if (!body) return {
         ok: false,
         error: 'Invalid request body'
     };
-    const reason = sanitizePlainText(body.reason || '', 1000);
+    const reason = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$security$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["sanitizePlainText"])(body.reason || '', 1000);
     if (!reason) return {
         ok: false,
         error: 'Reason is required'
@@ -704,7 +777,10 @@ async function POST(req) {
         }
         const authData = await authResp.json();
         const accessToken = authData.access_token;
-        if (userError || !user) return (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$helpers$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["errorResponse"])('Invalid credentials', 401);
+        const supabaseRefreshToken = authData.refresh_token;
+        if (userError || !user || !accessToken || !supabaseRefreshToken) {
+            return (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$helpers$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["errorResponse"])('Invalid credentials', 401);
+        }
         // Check active
         if (!user.is_active) {
             return (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$helpers$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["errorResponse"])('Account is inactive', 403);
@@ -746,7 +822,7 @@ async function POST(req) {
         await supabase.from('sessions').insert({
             id: sessionID,
             user_id: user.id,
-            token_id: accessToken,
+            token_id: supabaseRefreshToken,
             ip_address: ipAddress,
             user_agent: userAgent,
             created_at: now,
@@ -763,11 +839,11 @@ async function POST(req) {
             success: true,
             created_at: now
         });
-        const permissions = getRolePermissions(user.role);
+        const permissions = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$helpers$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["getRolePermissions"])(user.role);
         const response = (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$helpers$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["jsonResponse"])({
             token: accessToken,
             refreshToken: sessionID,
-            expiresIn: 86400,
+            expiresIn: authData.expires_in || 3600,
             user,
             roles: [
                 user.role
@@ -778,33 +854,6 @@ async function POST(req) {
     } catch (error) {
         console.error('Login error:', error);
         return (0, __TURBOPACK__imported__module__$5b$project$5d2f$lib$2f$api$2d$helpers$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["errorResponse"])('Internal server error', 500);
-    }
-}
-function getRolePermissions(role) {
-    switch(role){
-        case 'super_admin':
-            return [
-                'read',
-                'write',
-                'delete',
-                'admin',
-                'manage_admins',
-                'manage_roles',
-                'view_analytics'
-            ];
-        case 'admin':
-            return [
-                'read',
-                'write',
-                'delete',
-                'admin',
-                'view_analytics'
-            ];
-        default:
-            return [
-                'read',
-                'write'
-            ];
     }
 }
 }),

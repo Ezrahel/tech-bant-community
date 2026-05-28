@@ -9,17 +9,15 @@ import {
   faBookmark as faBookmarkSolid,
   faArrowLeft,
   faPaperPlane,
-  faFlag,
   faShieldAlt,
-  faCheckCircle,
-  faFire
+  faCheckCircle
 } from '@fortawesome/free-solid-svg-icons';
 import {
   faHeart as faHeartRegular,
   faBookmark as faBookmarkRegular
 } from '@fortawesome/free-regular-svg-icons';
 import { postsService } from '../services/posts';
-import { commentsService } from '../services/comments';
+import { CommentResponse, commentsService } from '../services/comments';
 import { Post } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import ShareMenu from '../components/ShareMenu';
@@ -31,7 +29,7 @@ const PostDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, userProfile } = useAuth();
   const [post, setPost] = useState<Post | null>(null);
-  const [comments, setComments] = useState<any[]>([]);
+  const [comments, setComments] = useState<CommentResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [commentContent, setCommentContent] = useState('');
   const [postingComment, setPostingComment] = useState(false);
@@ -50,6 +48,7 @@ const PostDetailPage: React.FC = () => {
       loadPost();
       loadComments();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId]);
 
   const loadPost = async () => {

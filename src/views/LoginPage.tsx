@@ -16,7 +16,7 @@ const LoginPage: React.FC = () => {
   const [show2FA, setShow2FA] = useState(false);
   const [otpCode, setOtpCode] = useState('');
 
-  const from = (location.state as any)?.from?.pathname || '/';
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -27,12 +27,12 @@ const LoginPage: React.FC = () => {
       await authService.login({ email, password });
       await refreshUserProfile();
       navigate(from, { replace: true });
-    } catch (err: any) {
-      // Check if 2FA is required
-      if (err.message?.includes('2FA') || err.message?.includes('two-factor')) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '';
+      if (message.includes('2FA') || message.includes('two-factor')) {
         setShow2FA(true);
       } else {
-        setError(err.message || 'Invalid credentials');
+        setError(message || 'Invalid credentials');
       }
     } finally {
       setLoading(false);
@@ -48,8 +48,8 @@ const LoginPage: React.FC = () => {
       await authService.login({ email, password, otpCode });
       await refreshUserProfile();
       navigate(from, { replace: true });
-    } catch (err: any) {
-      setError(err.message || 'Invalid verification code');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Invalid verification code');
     } finally {
       setLoading(false);
     }
@@ -58,8 +58,8 @@ const LoginPage: React.FC = () => {
   const handleGoogleLogin = async () => {
     try {
       await authService.loginWithGoogle();
-    } catch (err: any) {
-      setError(err.message || 'Failed to sign in with Google');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
     }
   };
 

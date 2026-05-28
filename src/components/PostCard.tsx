@@ -6,7 +6,6 @@ import {
   faComment,
   faEye,
   faBookmark as faBookmarkSolid,
-  faFire,
   faShieldAlt,
   faCheckCircle
 } from '@fortawesome/free-solid-svg-icons';
@@ -34,9 +33,10 @@ const PostCard: React.FC<PostCardProps> = ({ post, onClick }) => {
   const [bookmarked, setBookmarked] = useState(post.isBookmarked || false);
   const [likesCount, setLikesCount] = useState(post.likes);
   const [sharesCount, setSharesCount] = useState(post.shares || 0);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
 
-  const getCategoryColor = (category: string) => {
+  const getCategoryColor = (_category: string) => {
+    void _category;
     return 'text-gray-300 bg-gray-800/50';
   };
 
