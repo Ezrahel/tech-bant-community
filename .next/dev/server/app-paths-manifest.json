@@ -1,6 +1,3 @@
 {
-  "/api/v1/auth/login/route": "app/api/v1/auth/login/route.js",
-  "/api/v1/auth/signup/route": "app/api/v1/auth/signup/route.js",
-  "/api/v1/auth/verify/route": "app/api/v1/auth/verify/route.js",
-  "/api/v1/posts/route": "app/api/v1/posts/route.js"
+  "/api/v1/auth/oauth/google/route": "app/api/v1/auth/oauth/google/route.js"
 }
