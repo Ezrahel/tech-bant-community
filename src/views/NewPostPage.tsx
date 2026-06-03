@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { postsService } from '../services/posts';
 import { useAuth } from '../contexts/AuthContext';
+import TipTapEditor from '../components/editor/TipTapEditor';
 
 const postCategories = [
   { id: 'general', name: 'General', description: 'General discussions' },
@@ -29,6 +30,7 @@ const NewPostPage: React.FC = () => {
   const { userProfile } = useAuth();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
+  const [htmlContent, setHtmlContent] = useState('');
   const [category, setCategory] = useState('general');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
@@ -112,8 +114,8 @@ const NewPostPage: React.FC = () => {
       return;
     }
 
-    if (!content.trim() || content.length > 10000) {
-      setError('Content is required and must be less than 10000 characters');
+    if (!content.trim() && !htmlContent.trim()) {
+      setError('Content is required');
       return;
     }
 
@@ -127,7 +129,8 @@ const NewPostPage: React.FC = () => {
     try {
       await postsService.createPost({
         title: title.trim(),
-        content: content.trim(),
+        content: content.trim() || htmlContent.replace(/<[^>]+>/g, '').trim(),
+        html_content: htmlContent || undefined,
         category: category,
         tags,
         location: location || undefined,
@@ -161,7 +164,7 @@ const NewPostPage: React.FC = () => {
             <h1 className="text-2xl font-semibold text-white">Create Post</h1>
             <button
               type="submit"
-              disabled={isPosting || uploading || !title.trim() || !content.trim()}
+              disabled={isPosting || uploading || !title.trim() || (!content.trim() && !htmlContent.trim())}
               className="bg-white text-black px-6 py-2.5 rounded-xl font-semibold hover:bg-gray-100 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
             >
               {isPosting ? (
@@ -277,20 +280,19 @@ const NewPostPage: React.FC = () => {
 
           {/* Content */}
           <div className="mb-6">
-            <label htmlFor="content" className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Content
             </label>
-            <textarea
-              id="content"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              placeholder="Share your thoughts..."
-              rows={12}
-              maxLength={10000}
-              required
-              className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
-            />
-            <p className="text-xs text-gray-500 mt-1 text-right">{content.length}/10000</p>
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
+              <TipTapEditor
+                content={htmlContent}
+                onChange={(html) => {
+                  setHtmlContent(html);
+                  setContent(html.replace(/<[^>]+>/g, '').trim());
+                }}
+                placeholder="Share your thoughts..."
+              />
+            </div>
           </div>
 
           {/* Tags */}

@@ -201,6 +201,7 @@ export async function POST(req: NextRequest) {
         const body = await parseBody<{
             title: string;
             content: string;
+            html_content?: string;
             category: string;
             tags?: string[];
             location?: string;
@@ -210,6 +211,7 @@ export async function POST(req: NextRequest) {
 
         const title = sanitizePlainText(body.title || '', 200);
         const content = sanitizeUserContent(body.content || '');
+        const htmlContent = body.html_content ? sanitizeUserContent(body.html_content) : null;
         const category = sanitizePlainText(body.category || '', 50);
         const tags = (body.tags || [])
             .map((tag) => sanitizePlainText(tag, 50))
@@ -247,6 +249,7 @@ export async function POST(req: NextRequest) {
             .insert({
                 title,
                 content,
+                html_content: htmlContent,
                 author_id: user.id,
                 category,
                 tags,

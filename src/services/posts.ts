@@ -5,6 +5,7 @@ import { Post, Category } from '../types';
 export interface CreatePostData {
   title: string;
   content: string;
+  html_content?: string;
   category: string;
   tags: string[];
   location?: string;
@@ -21,6 +22,7 @@ export interface PostResponse {
   id: string;
   title: string;
   content: string;
+  html_content?: string;
   author_id: string;
   author: {
     id: string;
@@ -142,6 +144,7 @@ class PostsService {
       id: response.id,
       title: response.title,
       content: response.content,
+      html_content: response.html_content,
       author: {
         id: response.author.id,
         name: response.author.name,

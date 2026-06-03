@@ -17,6 +17,9 @@ import PostDetailPage from './views/PostDetailPage';
 import ForgotPasswordPage from './views/ForgotPasswordPage';
 import NotificationsPage from './views/NotificationsPage';
 import ProtectedPageShell from './components/ProtectedPageShell';
+import ArticleListPage from './views/articles/ArticleListPage';
+import ArticleEditorPage from './views/articles/ArticleEditorPage';
+import ArticleViewPage from './views/articles/ArticleViewPage';
 
 function ProtectedRoute({
   children,
@@ -133,6 +136,36 @@ function AppContent() {
           <Route
             path="/support"
             element={<ProtectedPageShell><SupportPage /></ProtectedPageShell>}
+          />
+
+          {/* Article Routes */}
+          <Route
+            path="/admin/articles"
+            element={
+              <ProtectedRoute adminOnly withShell={false}>
+                <ArticleListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/articles/new"
+            element={
+              <ProtectedRoute adminOnly withShell={false}>
+                <ArticleEditorPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/articles/:id/edit"
+            element={
+              <ProtectedRoute adminOnly withShell={false}>
+                <ArticleEditorPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/articles/:id"
+            element={<ProtectedPageShell><ArticleViewPage /></ProtectedPageShell>}
           />
 
           <Route

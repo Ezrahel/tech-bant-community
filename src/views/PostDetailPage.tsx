@@ -23,6 +23,7 @@ import { useAuth } from '../contexts/AuthContext';
 import ShareMenu from '../components/ShareMenu';
 import ManagementMenu from '../components/ManagementMenu';
 import ImageCollage from '../components/ImageCollage';
+import TipTapEditor from '../components/editor/TipTapEditor';
 
 const PostDetailPage: React.FC = () => {
   const { postId } = useParams<{ postId: string }>();
@@ -40,6 +41,7 @@ const PostDetailPage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editContent, setEditContent] = useState('');
+  const [editHtmlContent, setEditHtmlContent] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editCommentContent, setEditCommentContent] = useState('');
 
@@ -58,6 +60,7 @@ const PostDetailPage: React.FC = () => {
       setPost(convertedPost);
       setEditTitle(convertedPost.title);
       setEditContent(convertedPost.content);
+      setEditHtmlContent(convertedPost.html_content || '');
       setLiked(convertedPost.isLiked || false);
       setBookmarked(convertedPost.isBookmarked || false);
       setLikesCount(convertedPost.likes);
@@ -134,12 +137,14 @@ const PostDetailPage: React.FC = () => {
   };
 
   const handleUpdate = async () => {
-    if (!editTitle.trim() || !editContent.trim()) return;
+    const plainText = editHtmlContent ? editHtmlContent.replace(/<[^>]+>/g, '').trim() : editContent.trim();
+    if (!editTitle.trim() || (!plainText && !editHtmlContent)) return;
     setLoading(true);
     try {
       const response = await postsService.updatePost(postId!, {
         title: editTitle.trim(),
-        content: editContent.trim(),
+        content: plainText || editContent.trim(),
+        html_content: editHtmlContent || undefined,
       });
       setPost(postsService.convertToPost(response));
       setIsEditing(false);
@@ -275,13 +280,16 @@ const PostDetailPage: React.FC = () => {
               className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
               placeholder="Post title"
             />
-            <textarea
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              rows={8}
-              className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 resize-none"
-              placeholder="What's on your mind?"
-            />
+            <div className="bg-gray-800/50 border border-gray-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent transition-all">
+              <TipTapEditor
+                content={editHtmlContent}
+                onChange={(html) => {
+                  setEditHtmlContent(html);
+                  setEditContent(html.replace(/<[^>]+>/g, '').trim());
+                }}
+                placeholder="What's on your mind?"
+              />
+            </div>
             <div className="flex justify-end space-x-3">
               <button
                 onClick={() => setIsEditing(false)}
@@ -291,7 +299,7 @@ const PostDetailPage: React.FC = () => {
               </button>
               <button
                 onClick={handleUpdate}
-                disabled={!editTitle.trim() || !editContent.trim()}
+                disabled={!editTitle.trim() || (!editContent.trim() && !editHtmlContent.trim())}
                 className="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-500 transition-colors disabled:opacity-50"
               >
                 Save Changes
@@ -301,9 +309,16 @@ const PostDetailPage: React.FC = () => {
         ) : (
           <>
             <h1 className="text-xl sm:text-3xl font-bold text-white mb-3 sm:mb-4 leading-tight">{post.title}</h1>
-            <div className="prose prose-invert max-w-none mb-6 text-gray-300 leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words">
-              {post.content}
-            </div>
+            {post.html_content ? (
+              <div
+                className="prose prose-invert max-w-none mb-6 text-gray-300 text-sm sm:text-base"
+                dangerouslySetInnerHTML={{ __html: post.html_content }}
+              />
+            ) : (
+              <div className="prose prose-invert max-w-none mb-6 text-gray-300 leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words">
+                {post.content}
+              </div>
+            )}
           </>
         )}
 

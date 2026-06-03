@@ -129,6 +129,19 @@ const Header: React.FC<HeaderProps> = ({ searchQuery, setSearchQuery }) => {
                   <FontAwesomeIcon icon={faQuestionCircle} className="w-4 h-4" />
                   <span>Support</span>
                 </button>
+                {isAuthenticated && (userProfile?.role === 'admin' || userProfile?.role === 'super_admin') && (
+                  <button
+                    type="button"
+                    onClick={() => navigateTo('/admin/articles')}
+                    className={`flex items-center space-x-2 px-3 py-2 rounded-xl text-sm font-medium transition-all ${isActive('/admin/articles')
+                      ? 'text-white bg-gray-900/50'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-900/30'
+                      }`}
+                  >
+                    <FontAwesomeIcon icon={faShieldAlt} className="w-4 h-4" />
+                    <span>Articles</span>
+                  </button>
+                )}
               </nav>
             </nav>
           </div>

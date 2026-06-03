@@ -123,6 +123,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         const body = await parseBody<{
             title?: string;
             content?: string;
+            html_content?: string;
             category?: string;
             tags?: string[];
             location?: string;
@@ -139,6 +140,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             const content = sanitizeUserContent(body.content);
             if (!content) return errorResponse('Content is required');
             updates.content = content;
+        }
+        if (body.html_content !== undefined) {
+            updates.html_content = body.html_content ? sanitizeUserContent(body.html_content) : null;
         }
         if (body.category !== undefined) {
             const category = sanitizePlainText(body.category, 50);

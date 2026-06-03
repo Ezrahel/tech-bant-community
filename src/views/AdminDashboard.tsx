@@ -235,6 +235,23 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* Articles Management */}
+        <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6 mb-8">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold font-nothing">Articles</h2>
+              <p className="text-gray-400 text-sm mt-1">Manage articles and blog posts</p>
+            </div>
+            <button
+              onClick={() => window.location.href = '/admin/articles'}
+              className="flex items-center space-x-2 bg-white text-black px-4 py-2 rounded-full hover:bg-gray-200 transition-colors text-sm font-medium"
+            >
+              <MessageSquare className="w-4 h-4" />
+              <span>Manage Articles</span>
+            </button>
+          </div>
+        </div>
+
         {/* Admin Management */}
         <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-6">
           <div className="flex items-center justify-between mb-6">
