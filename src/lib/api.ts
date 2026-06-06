@@ -7,17 +7,20 @@ export interface ApiError {
   error: string;
   request_id?: string;
   code?: number;
+  postId?: string;
 }
 
 export class ApiRequestError extends Error {
   status?: number;
   code?: number;
+  postId?: string;
 
-  constructor(message: string, status?: number, code?: number) {
+  constructor(message: string, status?: number, code?: number, postId?: string) {
     super(message);
     this.name = 'ApiRequestError';
     this.status = status;
     this.code = code;
+    this.postId = postId;
   }
 }
 
@@ -71,14 +74,18 @@ class ApiClient {
       !endpoint.startsWith('/auth/logout');
   }
 
-  async refreshSession(): Promise<boolean> {
+  async refreshSession(options: { allowCookieOnly?: boolean } = {}): Promise<boolean> {
     if (this.refreshInFlight) {
       return this.refreshInFlight;
     }
 
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken && !options.allowCookieOnly) {
+      return false;
+    }
+
     this.refreshInFlight = (async () => {
       try {
-        const refreshToken = this.getRefreshToken();
         const response = await fetch(`${this.baseURL}/auth/refresh`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -149,7 +156,7 @@ class ApiClient {
         allowUnauthorizedRetry &&
         this.shouldAttemptRefresh(endpoint)
       ) {
-        const refreshed = await this.refreshSession();
+        const refreshed = await this.refreshSession({ allowCookieOnly: true });
         if (refreshed) {
           return this.request<T>(endpoint, options, false);
         }
@@ -164,7 +171,8 @@ class ApiClient {
         throw new ApiRequestError(
           errorData.error || `HTTP ${response.status}`,
           response.status,
-          errorData.code
+          errorData.code,
+          errorData.postId
         );
       }
 
@@ -238,7 +246,7 @@ class ApiClient {
         error.status === 401 &&
         this.shouldAttemptRefresh(endpoint)
       ) {
-        const refreshed = await this.refreshSession();
+        const refreshed = await this.refreshSession({ allowCookieOnly: true });
         if (refreshed) {
           return sendUpload();
         }
@@ -304,7 +312,7 @@ class ApiClient {
         error.status === 401 &&
         this.shouldAttemptRefresh(endpoint)
       ) {
-        const refreshed = await this.refreshSession();
+        const refreshed = await this.refreshSession({ allowCookieOnly: true });
         if (refreshed) {
           return sendUpload();
         }

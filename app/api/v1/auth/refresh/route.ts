@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     try {
         const body = await parseBody<{ refreshToken?: string }>(req);
         const refreshToken = body?.refreshToken || req.cookies.get(REFRESH_TOKEN_COOKIE)?.value;
-        if (!refreshToken) return errorResponse('Refresh token is required');
+        if (!refreshToken) return errorResponse('Refresh token is required', 401);
 
         const supabase = getSupabaseAdmin();
         const ipAddress = getClientIP(req);

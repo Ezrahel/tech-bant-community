@@ -48,6 +48,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const loadUser = async () => {
+    if (!authService.isAuthenticated()) {
+      setUser(null);
+      setUserProfile(null);
+      setLoading(false);
+      return;
+    }
+
     try {
       const profile = await authService.verifyToken();
       setUser(profile);

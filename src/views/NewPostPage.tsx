@@ -12,6 +12,7 @@ import {
   faCheckCircle
 } from '@fortawesome/free-solid-svg-icons';
 import { useNavigate } from 'react-router-dom';
+import { ApiRequestError } from '../lib/api';
 import { postsService } from '../services/posts';
 import { useAuth } from '../contexts/AuthContext';
 import TipTapEditor from '../components/editor/TipTapEditor';
@@ -139,6 +140,14 @@ const NewPostPage: React.FC = () => {
 
       navigate('/', { replace: true });
     } catch (err: unknown) {
+      if (err instanceof ApiRequestError && err.status === 409) {
+        if (err.postId) {
+          navigate(`/posts/${err.postId}`, { replace: true });
+          return;
+        }
+        setError('This post was already published. Try changing the title or content.');
+        return;
+      }
       setError(err instanceof Error ? err.message : 'Failed to create post');
     } finally {
       setIsPosting(false);

@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, paginationParams, getUserFromRequest } from '@/lib/api-helpers';
 import { syncUserPostsCount } from '@/lib/counters';
 import { getSupabaseAdmin } from '@/lib/supabase';
@@ -243,7 +243,12 @@ export async function POST(req: NextRequest) {
             .limit(1)
             .maybeSingle();
 
-        if (existing) return errorResponse('Duplicate post detected', 409);
+        if (existing) {
+            return NextResponse.json(
+                { error: 'This post was already published', postId: existing.id },
+                { status: 409 }
+            );
+        }
 
         const now = new Date().toISOString();
 
@@ -266,24 +271,20 @@ export async function POST(req: NextRequest) {
             updated_at: now,
         };
 
-        const selectQuery = `*, author:users!author_id(${PUBLIC_USER_COLUMNS})`;
-
-        let { data: post, error } = await supabase
+        const insertPost = async (payload: Record<string, unknown>) => supabase
             .from('posts')
-            .insert({
-                ...basePostData,
-                ...(htmlContent ? { html_content: htmlContent } : {}),
-            })
-            .select(selectQuery)
+            .insert(payload)
+            .select('*')
             .single();
+
+        let { data: post, error } = await insertPost({
+            ...basePostData,
+            ...(htmlContent ? { html_content: htmlContent } : {}),
+        });
 
         if (error && htmlContent && isMissingHtmlContentColumnError(error)) {
             console.warn('posts.html_content column missing; retrying insert without rich text. Run supabase-migrations/003_posts_html_content.sql.');
-            ({ data: post, error } = await supabase
-                .from('posts')
-                .insert(basePostData)
-                .select(selectQuery)
-                .single());
+            ({ data: post, error } = await insertPost(basePostData));
         }
 
         if (error) {
@@ -294,18 +295,51 @@ export async function POST(req: NextRequest) {
             return errorResponse('Failed to create post', 500);
         }
 
+        const { data: author, error: authorError } = await supabase
+            .from('users')
+            .select(PUBLIC_USER_COLUMNS)
+            .eq('id', user.id)
+            .single();
+
+        if (authorError) {
+            console.error('Supabase fetch post author error:', authorError);
+        }
+
+        const hydratedPost = {
+            ...post,
+            author: author || {
+                id: user.id,
+                name: 'Unknown user',
+                avatar: '',
+                bio: null,
+                location: null,
+                website: null,
+                is_admin: user.isAdmin || false,
+                is_verified: false,
+                role: user.role || 'user',
+                provider: 'email',
+                posts_count: 0,
+                followers_count: 0,
+                following_count: 0,
+                created_at: post.created_at,
+                updated_at: post.updated_at,
+            },
+            media: [] as Array<{ id: string; type: string; url: string; name: string | null; size: number | null }>,
+        };
+
         // Link media if provided
         if (mediaIDs.length > 0) {
-            const { error: mediaError } = await supabase
+            const { data: linkedMedia, error: mediaError } = await supabase
                 .from('media')
                 .update({ post_id: post.id })
                 .in('id', mediaIDs)
-                .eq('user_id', user.id);
+                .eq('user_id', user.id)
+                .select('id, type, url, name, size');
 
             if (mediaError) {
                 console.error('Failed to link media:', mediaError);
-                // We don't fail the whole post creation if media linking fails, 
-                // but we should probably log it.
+            } else if (linkedMedia) {
+                hydratedPost.media = linkedMedia;
             }
         }
 
@@ -325,7 +359,7 @@ export async function POST(req: NextRequest) {
                 .eq('id', user.id);
         }
 
-        return jsonResponse(post, 201);
+        return jsonResponse(hydratedPost, 201);
     } catch (error: unknown) {
         console.error('Create post error:', error);
         return errorResponse('Internal server error', 500);

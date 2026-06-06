@@ -169,7 +169,7 @@ class AuthService {
 
   async syncSessionFromCookies(): Promise<AuthResponse | null> {
     try {
-      const refreshed = await apiClient.refreshSession();
+      const refreshed = await apiClient.refreshSession({ allowCookieOnly: true });
       if (!refreshed) return null;
 
       const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
@@ -192,7 +192,7 @@ class AuthService {
     const token = this.getToken();
     const refreshToken = this.getRefreshTokenValue();
     if (!token && !refreshToken) {
-      return (await this.syncSessionFromCookies())?.user || null;
+      return null;
     }
 
     try {

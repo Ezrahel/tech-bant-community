@@ -1,23 +1,8 @@
 import { randomInt, createHash } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 
-export const PUBLIC_USER_COLUMNS = `
-    id,
-    name,
-    avatar,
-    bio,
-    location,
-    website,
-    is_admin,
-    is_verified,
-    role,
-    provider,
-    posts_count,
-    followers_count,
-    following_count,
-    created_at,
-    updated_at
-`;
+export const PUBLIC_USER_COLUMNS =
+    'id,name,avatar,bio,location,website,is_admin,is_verified,role,provider,posts_count,followers_count,following_count,created_at,updated_at';
 
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
     'image/jpeg',
