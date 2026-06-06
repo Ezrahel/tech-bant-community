@@ -45,6 +45,8 @@ module.exports = mod;
 "use strict";
 
 __turbopack_context__.s([
+    "ensureStorageBucket",
+    ()=>ensureStorageBucket,
     "getStorageBucket",
     ()=>getStorageBucket,
     "getSupabaseAdmin",
@@ -106,6 +108,64 @@ function getSupabaseAnonKey() {
 }
 function getStorageBucket() {
     return process.env.SUPABASE_STORAGE_BUCKET || 'media';
+}
+const bucketEnsured = new Set();
+async function ensureStorageBucket(bucket) {
+    const bucketName = bucket || getStorageBucket();
+    if (bucketEnsured.has(bucketName)) return;
+    const supabaseURL = getSupabaseURL();
+    const serviceKey = getSupabaseServiceKey();
+    // Check if bucket exists
+    const checkResp = await fetch(`${supabaseURL}/storage/v1/bucket/${bucketName}`, {
+        headers: {
+            'Authorization': `Bearer ${serviceKey}`
+        }
+    });
+    if (checkResp.ok) {
+        bucketEnsured.add(bucketName);
+        return;
+    }
+    // Create the bucket
+    const createResp = await fetch(`${supabaseURL}/storage/v1/bucket`, {
+        method: 'POST',
+        headers: {
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            id: bucketName,
+            name: bucketName,
+            public: true,
+            file_size_limit: 10 * 1024 * 1024,
+            allowed_mime_types: [
+                'image/jpeg',
+                'image/png',
+                'image/webp',
+                'image/gif',
+                'image/avif',
+                'video/mp4',
+                'video/webm',
+                'image/svg+xml'
+            ]
+        })
+    });
+    if (!createResp.ok) {
+        const errBody = await createResp.text();
+        console.error(`Failed to create storage bucket "${bucketName}":`, errBody);
+        throw new Error(`Failed to create storage bucket: ${errBody}`);
+    }
+    // Set bucket to public
+    await fetch(`${supabaseURL}/storage/v1/bucket/${bucketName}/public`, {
+        method: 'PUT',
+        headers: {
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            public: true
+        })
+    });
+    bucketEnsured.add(bucketName);
 }
 }),
 "[project]/lib/api-helpers.ts [app-route] (ecmascript)", ((__turbopack_context__) => {

@@ -162,7 +162,7 @@ const TipTapEditor: React.FC<TipTapEditorProps> = ({
   return (
     <div className="border border-white/10 rounded-xl overflow-hidden bg-black/40">
       <Toolbar editor={editor} onSetLink={setLink} onAddImage={addImage} onAddEmbed={addEmbed} />
-      <BubbleMenu editor={editor} tippyOptions={{ duration: 100 }}>
+      <BubbleMenu editor={editor}>
         <div className="flex items-center gap-0.5 bg-gray-900 rounded-lg border border-white/10 shadow-xl px-1 py-1">
           <button
             onClick={() => editor.chain().focus().toggleBold().run()}
