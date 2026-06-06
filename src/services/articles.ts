@@ -65,21 +65,11 @@ class ArticlesService {
     formData.append('file', file);
     if (articleId) formData.append('article_id', articleId);
 
-    const response = await fetch(`${apiClient['baseURL']}/articles/images/upload`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
-      },
-      body: formData,
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ error: 'Upload failed' }));
-      throw new Error(error.error || 'Upload failed');
-    }
-
-    return response.json();
+    return apiClient.uploadFormData('/articles/images/upload', formData) as Promise<{
+      id: string;
+      url: string;
+      alt?: string;
+    }>;
   }
 }
 

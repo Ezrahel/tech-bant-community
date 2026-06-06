@@ -42,8 +42,14 @@ const OAuthCallbackPage: React.FC = () => {
       refreshUserProfile();
       navigate('/', { replace: true });
     } else if (oauthSuccess) {
-      refreshUserProfile()
-        .then(() => navigate('/', { replace: true }))
+      authService.syncSessionFromCookies()
+        .then(async (session) => {
+          if (!session) {
+            throw new Error('OAuth session could not be established');
+          }
+          await refreshUserProfile();
+          navigate('/', { replace: true });
+        })
         .catch(() => {
           setError('OAuth session could not be established');
           setTimeout(() => navigate('/login'), 3000);

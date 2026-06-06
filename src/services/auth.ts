@@ -167,31 +167,43 @@ class AuthService {
     }
   }
 
+  async syncSessionFromCookies(): Promise<AuthResponse | null> {
+    try {
+      const refreshed = await apiClient.refreshSession();
+      if (!refreshed) return null;
+
+      const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
+      return {
+        token: this.getToken() || '',
+        refreshToken: this.getRefreshTokenValue() || '',
+        expiresIn: 3600,
+        user: mapApiUserToUser(response.user),
+        roles: [response.user.role || 'user'],
+        permissions: [],
+      };
+    } catch (error) {
+      console.error('Cookie session sync failed:', error);
+      return null;
+    }
+  }
+
   // Get current user from token
   async getCurrentUser(): Promise<User | null> {
-    const token = localStorage.getItem('auth_token');
+    const token = this.getToken();
     const refreshToken = this.getRefreshTokenValue();
-    if (!token && !refreshToken) return null;
+    if (!token && !refreshToken) {
+      return (await this.syncSessionFromCookies())?.user || null;
+    }
 
     try {
       const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
       return mapApiUserToUser(response.user);
     } catch (error: unknown) {
-      if (refreshToken) {
-        try {
-          await this.refreshStoredSession();
-          const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
-          return mapApiUserToUser(response.user);
-        } catch (refreshError) {
-          if (!this.isUnauthorizedError(refreshError)) {
-            console.error('Session refresh failed:', refreshError);
-          }
-          this.clearStoredSession();
-          return null;
-        }
-      }
-
       if (this.isUnauthorizedError(error)) {
+        const synced = await this.syncSessionFromCookies();
+        if (synced?.user) {
+          return synced.user;
+        }
         this.clearStoredSession();
         return null;
       }
@@ -220,17 +232,27 @@ class AuthService {
   }
 
   async refreshStoredSession(): Promise<AuthResponse> {
-    const refreshToken = this.getRefreshTokenValue();
-    if (!refreshToken) {
+    const refreshed = await apiClient.refreshSession();
+    if (!refreshed) {
       throw new Error('No refresh token available');
     }
 
-    return this.refreshToken(refreshToken);
+    const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
+    return {
+      token: this.getToken() || '',
+      refreshToken: this.getRefreshTokenValue() || '',
+      expiresIn: 3600,
+      user: mapApiUserToUser(response.user),
+      roles: [response.user.role || 'user'],
+      permissions: [],
+    };
   }
 
   // Check if user is authenticated
   isAuthenticated(): boolean {
-    return !!localStorage.getItem('auth_token') || !!this.getRefreshTokenValue();
+    const token = this.getToken();
+    const refreshToken = this.getRefreshTokenValue();
+    return !!token || !!refreshToken;
   }
 
   // Get stored token

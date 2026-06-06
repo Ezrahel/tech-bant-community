@@ -48,13 +48,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const loadUser = async () => {
-    if (!authService.isAuthenticated()) {
-      setUser(null);
-      setUserProfile(null);
-      setLoading(false);
-      return;
-    }
-
     try {
       const profile = await authService.verifyToken();
       setUser(profile);
@@ -63,7 +56,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       console.error('Error loading user:', error);
       setUser(null);
       setUserProfile(null);
-      // Clear invalid token
       authService.clearStoredSession();
     } finally {
       setLoading(false);

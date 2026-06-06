@@ -65,16 +65,13 @@ export interface AuthUser {
     isAdmin?: boolean;
 }
 
-/**
- * Extract user from Bearer token using Supabase Auth API
- */
-export async function getUserFromRequest(req: NextRequest): Promise<AuthUser | null> {
-    const authHeader = req.headers.get('Authorization');
-    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    const cookieToken = req.cookies.get(ACCESS_TOKEN_COOKIE)?.value || null;
-    const token = bearerToken || cookieToken;
+function normalizeAuthToken(token: string | null | undefined): string | null {
     if (!token) return null;
+    const trimmed = token.trim();
+    return trimmed.length > 0 ? trimmed : null;
+}
 
+async function resolveAuthUserFromToken(token: string): Promise<AuthUser | null> {
     try {
         const supabase = getSupabaseAdmin();
         const { data, error } = await supabase.auth.getUser(token);
@@ -87,11 +84,9 @@ export async function getUserFromRequest(req: NextRequest): Promise<AuthUser | n
         }
 
         if (!data.user) {
-            console.error('getUserFromRequest: No user in data');
             return null;
         }
 
-        // Get user profile from public.users
         const { data: profile, error: profileError } = await supabase
             .from('users')
             .select('role, is_admin')
@@ -111,6 +106,29 @@ export async function getUserFromRequest(req: NextRequest): Promise<AuthUser | n
     } catch {
         return null;
     }
+}
+
+/**
+ * Extract user from Bearer token or auth cookie using Supabase Auth API.
+ * Tries every available token so an expired Authorization header cannot
+ * shadow a still-valid httpOnly cookie.
+ */
+export async function getUserFromRequest(req: NextRequest): Promise<AuthUser | null> {
+    const authHeader = req.headers.get('Authorization');
+    const bearerToken = normalizeAuthToken(
+        authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null
+    );
+    const cookieToken = normalizeAuthToken(req.cookies.get(ACCESS_TOKEN_COOKIE)?.value || null);
+
+    const candidateTokens = Array.from(new Set([bearerToken, cookieToken].filter(Boolean))) as string[];
+    if (candidateTokens.length === 0) return null;
+
+    for (const token of candidateTokens) {
+        const user = await resolveAuthUserFromToken(token);
+        if (user) return user;
+    }
+
+    return null;
 }
 
 /**
