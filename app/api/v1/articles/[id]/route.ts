@@ -31,9 +31,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         }
 
         // Increment view count
-        await supabase.rpc('increment_article_views', { article_id: id }).catch(() => {
-            supabase.from('articles').update({ view_count: (article.view_count || 0) + 1 }).eq('id', id).catch(() => {});
-        });
+        try {
+            await supabase.rpc('increment_article_views', { article_id: id });
+        } catch {
+            try {
+                await supabase.from('articles').update({ view_count: (article.view_count || 0) + 1 }).eq('id', id);
+            } catch {
+                // Silently ignore — view count is non-critical
+            }
+        }
 
         return jsonResponse(article);
     } catch (error: unknown) {

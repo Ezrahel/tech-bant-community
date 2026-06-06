@@ -102,3 +102,14 @@ INSERT INTO public.article_categories (name, slug, description) VALUES
     ('Opinion', 'opinion', 'Opinion pieces and editorials'),
     ('Research', 'research', 'Research and analysis')
 ON CONFLICT (slug) DO NOTHING;
+
+-- Create storage bucket for images (also auto-created on first upload)
+INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+VALUES (
+    'media',
+    'media',
+    true,
+    10485760,
+    ARRAY['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'video/mp4', 'video/webm', 'image/svg+xml']::text[]
+)
+ON CONFLICT (id) DO NOTHING;

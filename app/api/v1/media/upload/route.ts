@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, withAuth } from '@/lib/api-helpers';
-import { getSupabaseAdmin, getSupabaseURL, getSupabaseServiceKey, getStorageBucket } from '@/lib/supabase';
+import { getSupabaseAdmin, getSupabaseURL, getSupabaseServiceKey, getStorageBucket, ensureStorageBucket } from '@/lib/supabase';
 import { buildSafeObjectPath, getUploadConstraints } from '@/lib/security';
 
 // POST /media/upload
@@ -19,6 +19,8 @@ export async function POST(req: NextRequest) {
         const supabaseURL = getSupabaseURL();
         const serviceKey = getSupabaseServiceKey();
         const bucket = getStorageBucket();
+
+        await ensureStorageBucket(bucket);
 
         const constraints = getUploadConstraints(file.type);
         if (!constraints) {
