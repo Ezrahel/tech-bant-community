@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS public.posts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     title TEXT NOT NULL,
     content TEXT NOT NULL,
+    html_content TEXT,
     author_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
     category TEXT NOT NULL,
     tags TEXT[] DEFAULT '{}',

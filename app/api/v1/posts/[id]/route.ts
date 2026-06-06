@@ -142,7 +142,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             updates.content = content;
         }
         if (body.html_content !== undefined) {
-            updates.html_content = body.html_content ? sanitizeUserContent(body.html_content) : null;
+            updates.html_content = body.html_content?.trim() || null;
         }
         if (body.category !== undefined) {
             const category = sanitizePlainText(body.category, 50);

@@ -10,6 +10,10 @@ function isMissingPostsTableError(error: { code?: string; message?: string } | n
     return error?.code === 'PGRST205' || error?.code === '42P01' || error?.message?.includes('relation') === true;
 }
 
+function isMissingHtmlContentColumnError(error: { code?: string; message?: string } | null | undefined) {
+    return error?.code === 'PGRST204' || error?.message?.includes('html_content') === true;
+}
+
 function buildSamplePostResponse() {
     return samplePosts.map((post) => ({
         id: post.id,
@@ -211,7 +215,7 @@ export async function POST(req: NextRequest) {
 
         const title = sanitizePlainText(body.title || '', 200);
         const content = sanitizeUserContent(body.content || '');
-        const htmlContent = body.html_content ? sanitizeUserContent(body.html_content) : null;
+        const htmlContent = body.html_content?.trim() || null;
         const category = sanitizePlainText(body.category || '', 50);
         const tags = (body.tags || [])
             .map((tag) => sanitizePlainText(tag, 50))
@@ -237,38 +241,58 @@ export async function POST(req: NextRequest) {
             .eq('author_id', user.id)
             .eq('content_hash', contentHash)
             .limit(1)
-            .single();
+            .maybeSingle();
 
         if (existing) return errorResponse('Duplicate post detected', 409);
 
         const now = new Date().toISOString();
 
-        // Insert post
-        const { data: post, error } = await supabase
+        const basePostData = {
+            title,
+            content,
+            author_id: user.id,
+            category,
+            tags,
+            likes: 0,
+            comments: 0,
+            views: 0,
+            shares: 0,
+            is_pinned: false,
+            is_hot: false,
+            location,
+            content_hash: contentHash,
+            published_at: now,
+            created_at: now,
+            updated_at: now,
+        };
+
+        const selectQuery = `*, author:users!author_id(${PUBLIC_USER_COLUMNS})`;
+
+        let { data: post, error } = await supabase
             .from('posts')
             .insert({
-                title,
-                content,
-                html_content: htmlContent,
-                author_id: user.id,
-                category,
-                tags,
-                likes: 0,
-                comments: 0,
-                views: 0,
-                shares: 0,
-                is_pinned: false,
-                is_hot: false,
-                location,
-                content_hash: contentHash,
-                published_at: now,
-                created_at: now,
-                updated_at: now,
+                ...basePostData,
+                ...(htmlContent ? { html_content: htmlContent } : {}),
             })
-            .select(`*, author:users!author_id(${PUBLIC_USER_COLUMNS})`)
+            .select(selectQuery)
             .single();
 
-        if (error) return errorResponse('Failed to create post', 500);
+        if (error && htmlContent && isMissingHtmlContentColumnError(error)) {
+            console.warn('posts.html_content column missing; retrying insert without rich text. Run supabase-migrations/003_posts_html_content.sql.');
+            ({ data: post, error } = await supabase
+                .from('posts')
+                .insert(basePostData)
+                .select(selectQuery)
+                .single());
+        }
+
+        if (error) {
+            console.error('Supabase create post error:', error);
+            if (isMissingPostsTableError(error)) {
+                return errorResponse('Posts are not available yet. Please run the database migrations in Supabase.', 503);
+            }
+            return errorResponse('Failed to create post', 500);
+        }
 
         // Link media if provided
         if (mediaIDs.length > 0) {
