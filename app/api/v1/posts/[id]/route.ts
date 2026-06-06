@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, getUserFromRequest } from '@/lib/api-helpers';
 import { incrementPostViews, syncUserPostsCount } from '@/lib/counters';
+import { fetchPostById, hydratePost } from '@/lib/posts';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/lib/security';
 import { samplePosts } from '@/src/data/sampleData';
@@ -15,15 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         const { id } = await params;
         const supabase = getSupabaseAdmin();
 
-        const { data: post, error } = await supabase
-            .from('posts')
-            .select(`
-                *,
-                author:users!author_id(${PUBLIC_USER_COLUMNS}),
-                media:media(id, type, url, name, size)
-            `)
-            .eq('id', id)
-            .single();
+        const { post, error } = await fetchPostById(supabase, id);
 
         if (error || !post) {
             if (isMissingPostsTableError(error)) {
@@ -63,27 +56,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             return errorResponse('Post not found', 404);
         }
 
-        // Check if current user has liked/bookmarked if authenticated
         let isLiked = false;
         let isBookmarked = false;
 
         const user = await getUserFromRequest(req);
         if (user) {
             const [{ data: like }, { data: bookmark }] = await Promise.all([
-                supabase.from('likes').select('id').eq('post_id', id).eq('user_id', user.id).single(),
-                supabase.from('bookmarks').select('id').eq('post_id', id).eq('user_id', user.id).single()
+                supabase.from('likes').select('id').eq('post_id', id).eq('user_id', user.id).maybeSingle(),
+                supabase.from('bookmarks').select('id').eq('post_id', id).eq('user_id', user.id).maybeSingle(),
             ]);
             isLiked = !!like;
             isBookmarked = !!bookmark;
         }
 
+        const currentViews = typeof post.views === 'number' ? post.views : 0;
         const incrementedViews = await incrementPostViews(id);
+
         if (incrementedViews === null) {
             await supabase
                 .from('posts')
                 .update({
-                    views: (post.views || 0) + 1,
-                    updated_at: post.updated_at
+                    views: currentViews + 1,
+                    updated_at: post.updated_at as string,
                 })
                 .eq('id', id);
         }
@@ -92,7 +86,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
             ...post,
             is_liked: isLiked,
             is_bookmarked: isBookmarked,
-            views: incrementedViews ?? ((post.views || 0) + 1)
+            views: incrementedViews ?? (currentViews + 1),
         });
     } catch (error: unknown) {
         console.error('Get post error:', error);
@@ -110,7 +104,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
         const supabase = getSupabaseAdmin();
 
-        // Verify ownership
         const { data: existing } = await supabase
             .from('posts')
             .select('author_id')
@@ -159,16 +152,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             updates.location = body.location ? sanitizePlainText(body.location, 100) : null;
         }
 
-        const { data: post, error } = await supabase
+        const { data: updatedPost, error } = await supabase
             .from('posts')
             .update(updates)
             .eq('id', id)
-            .select(`*, author:users!author_id(${PUBLIC_USER_COLUMNS})`)
+            .select('*')
             .single();
 
-        if (error) return errorResponse('Failed to update post', 500);
+        if (error || !updatedPost) return errorResponse('Failed to update post', 500);
 
-        return jsonResponse(post);
+        const hydratedPost = await hydratePost(supabase, updatedPost);
+        return jsonResponse(hydratedPost);
     } catch (error: unknown) {
         console.error('Update post error:', error);
         return errorResponse('Internal server error', 500);
@@ -185,7 +179,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
         const supabase = getSupabaseAdmin();
 
-        // Verify ownership
         const { data: existing } = await supabase
             .from('posts')
             .select('author_id')
@@ -195,7 +188,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         if (!existing) return errorResponse('Post not found', 404);
         if (existing.author_id !== user.id) return errorResponse('Unauthorized', 403);
 
-        // Delete post (CASCADE handles related records)
         const { error } = await supabase.from('posts').delete().eq('id', id);
         if (error) return errorResponse('Failed to delete post', 500);
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, paginationParams, getUserFromRequest } from '@/lib/api-helpers';
 import { syncUserPostsCount } from '@/lib/counters';
+import { hydratePost } from '@/lib/posts';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { createHash } from 'crypto';
 import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/lib/security';
@@ -295,70 +296,39 @@ export async function POST(req: NextRequest) {
             return errorResponse('Failed to create post', 500);
         }
 
-        const { data: author, error: authorError } = await supabase
-            .from('users')
-            .select(PUBLIC_USER_COLUMNS)
-            .eq('id', user.id)
-            .single();
-
-        if (authorError) {
-            console.error('Supabase fetch post author error:', authorError);
-        }
-
-        const hydratedPost = {
-            ...post,
-            author: author || {
-                id: user.id,
-                name: 'Unknown user',
-                avatar: '',
-                bio: null,
-                location: null,
-                website: null,
-                is_admin: user.isAdmin || false,
-                is_verified: false,
-                role: user.role || 'user',
-                provider: 'email',
-                posts_count: 0,
-                followers_count: 0,
-                following_count: 0,
-                created_at: post.created_at,
-                updated_at: post.updated_at,
-            },
-            media: [] as Array<{ id: string; type: string; url: string; name: string | null; size: number | null }>,
-        };
-
-        // Link media if provided
         if (mediaIDs.length > 0) {
-            const { data: linkedMedia, error: mediaError } = await supabase
+            const { error: mediaError } = await supabase
                 .from('media')
                 .update({ post_id: post.id })
                 .in('id', mediaIDs)
-                .eq('user_id', user.id)
-                .select('id, type, url, name, size');
+                .eq('user_id', user.id);
 
             if (mediaError) {
                 console.error('Failed to link media:', mediaError);
-            } else if (linkedMedia) {
-                hydratedPost.media = linkedMedia;
             }
         }
 
-        const syncedPostsCount = await syncUserPostsCount(user.id, now);
-        if (syncedPostsCount === null) {
-            const { count } = await supabase
-                .from('posts')
-                .select('*', { count: 'exact', head: true })
-                .eq('author_id', user.id);
+        try {
+            const syncedPostsCount = await syncUserPostsCount(user.id, now);
+            if (syncedPostsCount === null) {
+                const { count } = await supabase
+                    .from('posts')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('author_id', user.id);
 
-            await supabase
-                .from('users')
-                .update({
-                    posts_count: count || 0,
-                    updated_at: now,
-                })
-                .eq('id', user.id);
+                await supabase
+                    .from('users')
+                    .update({
+                        posts_count: count || 0,
+                        updated_at: now,
+                    })
+                    .eq('id', user.id);
+            }
+        } catch (counterError) {
+            console.error('Failed to sync user posts count:', counterError);
         }
 
+        const hydratedPost = await hydratePost(supabase, post);
         return jsonResponse(hydratedPost, 201);
     } catch (error: unknown) {
         console.error('Create post error:', error);

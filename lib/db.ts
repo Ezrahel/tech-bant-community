@@ -31,5 +31,11 @@ function getPool(): Pool | null {
 export async function queryOptional<T extends QueryResultRow>(text: string, values: unknown[] = []): Promise<QueryResult<T> | null> {
     const activePool = getPool();
     if (!activePool) return null;
-    return activePool.query<T>(text, values);
+
+    try {
+        return await activePool.query<T>(text, values);
+    } catch (error) {
+        console.error('Direct database query failed:', error);
+        return null;
+    }
 }
