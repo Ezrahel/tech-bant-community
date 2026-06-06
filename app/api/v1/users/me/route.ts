@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { sanitizePlainText, validateAvatarURL, validateWebsiteURL } from '@/lib/security';
+import { sanitizePlainText, validateAvatarURL, validateCoverPhotoURL, validateWebsiteURL } from '@/lib/security';
+import { syncUserPostsCountWithSupabase } from '@/lib/user-stats';
 
 // GET /users/me
 export async function GET(req: NextRequest) {
@@ -19,15 +20,10 @@ export async function GET(req: NextRequest) {
 
         if (error || !user) return errorResponse('User not found', 404);
 
-        // Get actual posts count
-        const { count } = await supabase
-            .from('posts')
-            .select('*', { count: 'exact', head: true })
-            .eq('author_id', authUser.id);
-
-        if (count !== null && count !== user.posts_count) {
-            user.posts_count = count;
-            await supabase.from('users').update({ posts_count: count }).eq('id', authUser.id);
+        try {
+            user.posts_count = await syncUserPostsCountWithSupabase(supabase, authUser.id);
+        } catch (syncError) {
+            console.error('Get me posts count sync error:', syncError);
         }
 
         return jsonResponse(user);
@@ -50,6 +46,7 @@ export async function PUT(req: NextRequest) {
             location?: string;
             website?: string;
             avatar?: string;
+            cover_photo?: string;
         }>(req);
         if (!body) return errorResponse('Invalid request body');
 
@@ -81,6 +78,13 @@ export async function PUT(req: NextRequest) {
                 return errorResponse('Avatar must be a valid https URL');
             }
             updates.avatar = avatar;
+        }
+        if (body.cover_photo !== undefined) {
+            const coverPhoto = validateCoverPhotoURL(body.cover_photo);
+            if (body.cover_photo.trim() && !coverPhoto) {
+                return errorResponse('Cover photo must be a valid https URL');
+            }
+            updates.cover_photo = coverPhoto;
         }
 
         const supabase = getSupabaseAdmin();

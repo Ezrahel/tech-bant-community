@@ -28,7 +28,7 @@ const postCategories = [
 
 const NewPostPage: React.FC = () => {
   const navigate = useNavigate();
-  const { userProfile } = useAuth();
+  const { userProfile, refreshUserProfile } = useAuth();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [htmlContent, setHtmlContent] = useState('');
@@ -138,6 +138,7 @@ const NewPostPage: React.FC = () => {
         mediaIds: media.map((m) => m.id),
       });
 
+      await refreshUserProfile();
       navigate('/', { replace: true });
     } catch (err: unknown) {
       if (err instanceof ApiRequestError && err.status === 409) {

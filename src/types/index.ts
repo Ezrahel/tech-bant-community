@@ -11,6 +11,10 @@ export interface User {
   isActive?: boolean;
   role?: string;
   provider?: string;
+  cover_photo?: string;
+  posts_count?: number;
+  followers_count?: number;
+  following_count?: number;
   createdAt?: string;
   updatedAt?: string;
 }

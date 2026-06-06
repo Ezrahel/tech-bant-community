@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAdmin } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { syncUserPostsCountWithSupabase } from '@/lib/user-stats';
 
 // DELETE /admin/posts/[id]
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -16,10 +17,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
         await supabase.from('posts').delete().eq('id', postId);
 
-        // Decrement author's post count
-        const { data: author } = await supabase.from('users').select('posts_count').eq('id', post.author_id).single();
-        if (author) {
-            await supabase.from('users').update({ posts_count: Math.max(0, (author.posts_count || 0) - 1) }).eq('id', post.author_id);
+        try {
+            await syncUserPostsCountWithSupabase(supabase, post.author_id);
+        } catch (syncError) {
+            console.error('Failed to sync author posts count after admin delete:', syncError);
         }
 
         return jsonResponse({ message: 'Post deleted successfully' });

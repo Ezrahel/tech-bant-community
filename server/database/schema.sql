@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS public.users (
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     avatar TEXT,
+    cover_photo TEXT,
     bio TEXT,
     location TEXT,
     website TEXT,

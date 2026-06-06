@@ -1,5 +1,5 @@
 // User profile page with Apple design philosophy
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Edit3,
@@ -27,7 +27,7 @@ type TabType = 'posts' | 'likes' | 'media' | 'settings';
 const UserProfilePage: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
-  const { userProfile: currentUserProfile } = useAuth();
+  const { userProfile: currentUserProfile, refreshUserProfile } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [activeTab, setActiveTab] = useState<TabType>('posts');
@@ -35,6 +35,10 @@ const UserProfilePage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  const coverInputRef = useRef<HTMLInputElement>(null);
   const isCurrentUser = !userId || userId === currentUserProfile?.id;
 
   const [editForm, setEditForm] = useState<UpdateProfileData>({
@@ -43,6 +47,7 @@ const UserProfilePage: React.FC = () => {
     location: '',
     website: '',
     avatar: '',
+    cover_photo: '',
   });
 
   useEffect(() => {
@@ -71,6 +76,7 @@ const UserProfilePage: React.FC = () => {
           location: userProfile.location || '',
           website: userProfile.website || '',
           avatar: userProfile.avatar,
+          cover_photo: userProfile.cover_photo || '',
         });
 
         // Load user posts
@@ -104,6 +110,7 @@ const UserProfilePage: React.FC = () => {
       setProfile(updatedProfile);
       setIsEditing(false);
       setSuccess('Profile updated successfully!');
+      await refreshUserProfile();
 
       setTimeout(() => setSuccess(null), 3000);
     } catch (err: unknown) {
@@ -120,9 +127,49 @@ const UserProfilePage: React.FC = () => {
         location: profile.location || '',
         website: profile.website || '',
         avatar: profile.avatar,
+        cover_photo: profile.cover_photo || '',
       });
     }
     setIsEditing(false);
+  };
+
+  const handleImageUpload = async (file: File, type: 'avatar' | 'cover') => {
+    if (!isCurrentUser) return;
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Image must be 10MB or smaller');
+      return;
+    }
+
+    const setUploading = type === 'avatar' ? setUploadingAvatar : setUploadingCover;
+    setUploading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const imageURL = await userService.uploadProfileImage(file);
+      const updatedProfile = await userService.updateProfile(
+        type === 'avatar' ? { avatar: imageURL } : { cover_photo: imageURL }
+      );
+
+      setProfile(updatedProfile);
+      setEditForm((current) => ({
+        ...current,
+        ...(type === 'avatar' ? { avatar: imageURL } : { cover_photo: imageURL }),
+      }));
+      await refreshUserProfile();
+      setSuccess(type === 'avatar' ? 'Profile picture updated' : 'Cover photo updated');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to upload image');
+    } finally {
+      setUploading(false);
+    }
   };
 
   const formatDate = (dateString?: string) => {
@@ -191,10 +238,19 @@ const UserProfilePage: React.FC = () => {
         {/* Profile Card */}
           <div className="bg-gray-900/50 backdrop-blur-xl border-y border-gray-800 sm:border sm:rounded-2xl overflow-hidden mb-6">
           {/* Cover Photo */}
-          <div className="h-48 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 relative">
+          <div
+            className="h-48 bg-gradient-to-br from-blue-600/20 via-purple-600/20 to-pink-600/20 relative bg-cover bg-center"
+            style={profile.cover_photo ? { backgroundImage: `url(${profile.cover_photo})` } : undefined}
+          >
             {isCurrentUser && (
-              <button className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 rounded-xl transition-colors">
-                <Camera className="w-5 h-5" />
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                disabled={uploadingCover}
+                className="absolute top-4 right-4 p-2 bg-black/50 hover:bg-black/70 rounded-xl transition-colors disabled:opacity-50"
+                aria-label="Update cover photo"
+              >
+                <Camera className={`w-5 h-5 ${uploadingCover ? 'animate-pulse' : ''}`} />
               </button>
             )}
           </div>
@@ -209,11 +265,44 @@ const UserProfilePage: React.FC = () => {
                 className="h-24 w-24 rounded-full border-4 border-black sm:h-32 sm:w-32"
               />
               {isCurrentUser && (
-                <button className="absolute bottom-2 right-2 p-2 bg-black/70 hover:bg-black/90 rounded-full transition-colors">
-                  <Camera className="w-4 h-4" />
+                <button
+                  type="button"
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="absolute bottom-2 right-2 p-2 bg-black/70 hover:bg-black/90 rounded-full transition-colors disabled:opacity-50"
+                  aria-label="Update profile picture"
+                >
+                  <Camera className={`w-4 h-4 ${uploadingAvatar ? 'animate-pulse' : ''}`} />
                 </button>
               )}
             </div>
+
+            {isCurrentUser && (
+              <>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleImageUpload(file, 'avatar');
+                    e.target.value = '';
+                  }}
+                />
+                <input
+                  ref={coverInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleImageUpload(file, 'cover');
+                    e.target.value = '';
+                  }}
+                />
+              </>
+            )}
 
             {/* Profile Details */}
             <div className="space-y-4">

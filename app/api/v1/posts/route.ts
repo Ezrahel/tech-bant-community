@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, paginationParams, getUserFromRequest } from '@/lib/api-helpers';
-import { syncUserPostsCount } from '@/lib/counters';
+import { syncUserPostsCountWithSupabase } from '@/lib/user-stats';
 import { hydratePost } from '@/lib/posts';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { createHash } from 'crypto';
@@ -309,21 +309,7 @@ export async function POST(req: NextRequest) {
         }
 
         try {
-            const syncedPostsCount = await syncUserPostsCount(user.id, now);
-            if (syncedPostsCount === null) {
-                const { count } = await supabase
-                    .from('posts')
-                    .select('*', { count: 'exact', head: true })
-                    .eq('author_id', user.id);
-
-                await supabase
-                    .from('users')
-                    .update({
-                        posts_count: count || 0,
-                        updated_at: now,
-                    })
-                    .eq('id', user.id);
-            }
+            await syncUserPostsCountWithSupabase(supabase, user.id, now);
         } catch (counterError) {
             console.error('Failed to sync user posts count:', counterError);
         }

@@ -9,6 +9,7 @@ export interface UpdateProfileData {
   location?: string;
   website?: string;
   avatar?: string;
+  cover_photo?: string;
 }
 
 export interface UserProfile extends User {
@@ -39,6 +40,13 @@ class UserService {
     return this.convertToUserProfile(response);
   }
 
+  async uploadProfileImage(file: File): Promise<string> {
+    const uploaded = await apiClient.uploadFile('/media/upload', file) as {
+      url: string;
+    };
+    return uploaded.url;
+  }
+
   // Get user posts
   async getUserPosts<T = Record<string, unknown>>(
     userId: string,
@@ -66,6 +74,7 @@ class UserService {
       followers_count: response.followers_count,
       following_count: response.following_count,
       join_date: response.created_at,
+      cover_photo: response.cover_photo,
     };
   }
 }

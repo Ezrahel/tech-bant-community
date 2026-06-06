@@ -2,7 +2,7 @@ import { randomInt, createHash } from 'crypto';
 import { SupabaseClient } from '@supabase/supabase-js';
 
 export const PUBLIC_USER_COLUMNS =
-    'id,name,avatar,bio,location,website,is_admin,is_verified,role,provider,posts_count,followers_count,following_count,created_at,updated_at';
+    'id,name,avatar,cover_photo,bio,location,website,is_admin,is_verified,role,provider,posts_count,followers_count,following_count,created_at,updated_at';
 
 const ALLOWED_IMAGE_MIME_TYPES = new Set([
     'image/jpeg',
@@ -84,7 +84,7 @@ export function validateWebsiteURL(value: string): string | null {
     return url.toString();
 }
 
-export function validateAvatarURL(value: string): string | null {
+export function validateProfileImageURL(value: string): string | null {
     const trimmed = value.trim();
     if (!trimmed) {
         return null;
@@ -106,6 +106,9 @@ export function validateAvatarURL(value: string): string | null {
 
     return url.toString();
 }
+
+export const validateAvatarURL = validateProfileImageURL;
+export const validateCoverPhotoURL = validateProfileImageURL;
 
 export function getUploadConstraints(mimeType: string): { mediaType: 'image' | 'video'; maxBytes: number } | null {
     if (ALLOWED_IMAGE_MIME_TYPES.has(mimeType)) {

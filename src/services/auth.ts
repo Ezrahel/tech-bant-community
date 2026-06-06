@@ -172,13 +172,13 @@ class AuthService {
       const refreshed = await apiClient.refreshSession({ allowCookieOnly: true });
       if (!refreshed) return null;
 
-      const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
+      const response = await apiClient.get<ApiUserResponse>('/users/me');
       return {
         token: this.getToken() || '',
         refreshToken: this.getRefreshTokenValue() || '',
         expiresIn: 3600,
-        user: mapApiUserToUser(response.user),
-        roles: [response.user.role || 'user'],
+        user: mapApiUserToUser(response),
+        roles: [response.role || 'user'],
         permissions: [],
       };
     } catch (error) {
@@ -196,8 +196,8 @@ class AuthService {
     }
 
     try {
-      const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
-      return mapApiUserToUser(response.user);
+      const response = await apiClient.get<ApiUserResponse>('/users/me');
+      return mapApiUserToUser(response);
     } catch (error: unknown) {
       if (this.isUnauthorizedError(error)) {
         const synced = await this.syncSessionFromCookies();
@@ -237,13 +237,13 @@ class AuthService {
       throw new Error('No refresh token available');
     }
 
-    const response = await apiClient.get<{ user: ApiUserResponse }>('/auth/verify');
+    const response = await apiClient.get<ApiUserResponse>('/users/me');
     return {
       token: this.getToken() || '',
       refreshToken: this.getRefreshTokenValue() || '',
       expiresIn: 3600,
-      user: mapApiUserToUser(response.user),
-      roles: [response.user.role || 'user'],
+      user: mapApiUserToUser(response),
+      roles: [response.role || 'user'],
       permissions: [],
     };
   }

@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { jsonResponse, errorResponse, parseBody, withAuth, getUserFromRequest } from '@/lib/api-helpers';
-import { incrementPostViews, syncUserPostsCount } from '@/lib/counters';
+import { incrementPostViews } from '@/lib/counters';
+import { syncUserPostsCountWithSupabase } from '@/lib/user-stats';
 import { fetchPostById, hydratePost } from '@/lib/posts';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { PUBLIC_USER_COLUMNS, sanitizePlainText, sanitizeUserContent } from '@/lib/security';
@@ -191,17 +192,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         const { error } = await supabase.from('posts').delete().eq('id', id);
         if (error) return errorResponse('Failed to delete post', 500);
 
-        const syncedPostsCount = await syncUserPostsCount(user.id);
-        if (syncedPostsCount === null) {
-            const { count } = await supabase
-                .from('posts')
-                .select('*', { count: 'exact', head: true })
-                .eq('author_id', user.id);
-
-            await supabase
-                .from('users')
-                .update({ posts_count: count || 0 })
-                .eq('id', user.id);
+        try {
+            await syncUserPostsCountWithSupabase(supabase, user.id);
+        } catch (syncError) {
+            console.error('Failed to sync user posts count after delete:', syncError);
         }
 
         return jsonResponse({ message: 'Post deleted successfully' });

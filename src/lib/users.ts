@@ -5,6 +5,7 @@ export interface ApiUserResponse {
   name: string;
   email?: string;
   avatar: string;
+  cover_photo?: string;
   bio?: string;
   location?: string;
   website?: string;
@@ -34,6 +35,10 @@ export function mapApiUserToUser(response: ApiUserResponse): User {
     isActive: response.is_active,
     role: response.role,
     provider: response.provider,
+    cover_photo: response.cover_photo,
+    posts_count: response.posts_count,
+    followers_count: response.followers_count,
+    following_count: response.following_count,
     createdAt: response.created_at,
     updatedAt: response.updated_at,
   };

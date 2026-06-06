@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { clearAuthCookies, jsonResponse, errorResponse, withAuth } from '@/lib/api-helpers';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { syncUserPostsCountWithSupabase } from '@/lib/user-stats';
 
 export async function GET(req: NextRequest) {
     try {
@@ -20,6 +21,12 @@ export async function GET(req: NextRequest) {
             .single();
 
         if (error || !user) return errorResponse('User not found', 404);
+
+        try {
+            user.posts_count = await syncUserPostsCountWithSupabase(supabase, authUser.id);
+        } catch (syncError) {
+            console.error('Verify posts count sync error:', syncError);
+        }
 
         return jsonResponse({ user });
     } catch (error: unknown) {
