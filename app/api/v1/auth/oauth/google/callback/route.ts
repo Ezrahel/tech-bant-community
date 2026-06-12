@@ -8,7 +8,9 @@ export async function GET(req: NextRequest) {
     try {
         const url = new URL(req.url);
         const code = url.searchParams.get('code');
-        const state = url.searchParams.get('state');
+        // Our custom state is embedded in redirect_to (not the top-level state param
+        // which Supabase uses for its own CSRF)
+        const oauthState = url.searchParams.get('oauth_state');
 
         if (!code) {
             return errorResponse('Missing authorization code', 400);
@@ -16,26 +18,33 @@ export async function GET(req: NextRequest) {
 
         const supabase = getSupabaseAdmin();
 
-        if (!state) {
-            return errorResponse('Missing OAuth state', 400);
-        }
-
-        const { data: oauthState } = await supabase
-            .from('oauth_states')
-            .select('*')
-            .eq('state', state)
-            .single();
-
         if (!oauthState) {
             return errorResponse('Invalid OAuth state', 400);
         }
 
-        if (new Date(oauthState.expires_at) < new Date()) {
-            await supabase.from('oauth_states').delete().eq('state', state);
+        const { data: storedState, error: stateFetchError } = await supabase
+            .from('oauth_states')
+            .select('*')
+            .eq('state', oauthState)
+            .single();
+
+        if (stateFetchError) {
+            if (stateFetchError.code === '42P01' || stateFetchError.message?.includes('relation') === true) {
+                return errorResponse('OAuth state table not found. Run supabase-migrations/001_initial_schema.sql and 005_oauth_states.sql in your Supabase SQL editor.', 500);
+            }
+            return errorResponse('Failed to verify OAuth state', 500);
+        }
+
+        if (!storedState) {
+            return errorResponse('Invalid OAuth state', 400);
+        }
+
+        if (new Date(storedState.expires_at) < new Date()) {
+            await supabase.from('oauth_states').delete().eq('state', oauthState);
             return errorResponse('OAuth state expired', 400);
         }
 
-        const redirectURL = oauthState.redirect_url || url.origin;
+        const redirectURL = storedState.redirect_url || url.origin;
 
         // Exchange code for session via Supabase Auth
         const supabaseURL = getSupabaseURL();
@@ -53,12 +62,12 @@ export async function GET(req: NextRequest) {
         });
 
         if (!tokenResp.ok) {
-            await supabase.from('oauth_states').delete().eq('state', state);
+            await supabase.from('oauth_states').delete().eq('state', oauthState);
             return errorResponse('Failed to exchange authorization code', 400);
         }
 
         const authData = await tokenResp.json();
-        await supabase.from('oauth_states').delete().eq('state', state);
+        await supabase.from('oauth_states').delete().eq('state', oauthState);
 
         const accessToken = authData.access_token;
         const supabaseRefreshToken = authData.refresh_token;

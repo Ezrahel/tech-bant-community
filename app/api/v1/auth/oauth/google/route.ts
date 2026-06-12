@@ -34,8 +34,10 @@ export async function GET(req: NextRequest) {
         });
 
         // Build Google OAuth URL via Supabase Auth
-        const callbackURL = `${url.origin}/api/v1/auth/oauth/google/callback`;
-        const authURL = `${supabaseURL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackURL)}&state=${state}`;
+        // Embed our state in redirect_to (not as the top-level state param) so Supabase's
+        // own CSRF state management doesn't clash with ours
+        const callbackURL = `${url.origin}/api/v1/auth/oauth/google/callback?oauth_state=${encodeURIComponent(state)}`;
+        const authURL = `${supabaseURL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(callbackURL)}`;
 
         return jsonResponse({
             auth_url: authURL,
