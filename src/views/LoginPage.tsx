@@ -16,7 +16,7 @@ const LoginPage: React.FC = () => {
   const [show2FA, setShow2FA] = useState(false);
   const [otpCode, setOtpCode] = useState('');
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/';
+  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/discussions';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

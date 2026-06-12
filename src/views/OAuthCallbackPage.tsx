@@ -40,7 +40,7 @@ const OAuthCallbackPage: React.FC = () => {
         authService.setRefreshSession(refreshToken);
       }
       refreshUserProfile();
-      navigate('/', { replace: true });
+      navigate('/discussions', { replace: true });
     } else if (oauthSuccess) {
       authService.syncSessionFromCookies()
         .then(async (session) => {
@@ -48,7 +48,7 @@ const OAuthCallbackPage: React.FC = () => {
             throw new Error('OAuth session could not be established');
           }
           await refreshUserProfile();
-          navigate('/', { replace: true });
+          navigate('/discussions', { replace: true });
         })
         .catch(() => {
           setError('OAuth session could not be established');

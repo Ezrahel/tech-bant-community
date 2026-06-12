@@ -51,7 +51,7 @@ const SignupPage: React.FC = () => {
       await refreshUserProfile();
       
       setTimeout(() => {
-        navigate('/', { replace: true });
+        navigate('/discussions', { replace: true });
       }, 1500);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create account');
