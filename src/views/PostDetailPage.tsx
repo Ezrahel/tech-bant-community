@@ -1,7 +1,7 @@
 // Post detail page with Apple design philosophy
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faHeart as faHeartSolid,
   faComment,
@@ -10,20 +10,20 @@ import {
   faArrowLeft,
   faPaperPlane,
   faShieldAlt,
-  faCheckCircle
-} from '@fortawesome/free-solid-svg-icons';
+  faCheckCircle,
+} from "@fortawesome/free-solid-svg-icons";
 import {
   faHeart as faHeartRegular,
-  faBookmark as faBookmarkRegular
-} from '@fortawesome/free-regular-svg-icons';
-import { postsService } from '../services/posts';
-import { CommentResponse, commentsService } from '../services/comments';
-import { Post } from '../types';
-import { useAuth } from '../contexts/AuthContext';
-import ShareMenu from '../components/ShareMenu';
-import ManagementMenu from '../components/ManagementMenu';
-import ImageCollage from '../components/ImageCollage';
-import TipTapEditor from '../components/editor/TipTapEditor';
+  faBookmark as faBookmarkRegular,
+} from "@fortawesome/free-regular-svg-icons";
+import { postsService } from "../services/posts";
+import { CommentResponse, commentsService } from "../services/comments";
+import { Post } from "../types";
+import { useAuth } from "../contexts/AuthContext";
+import ShareMenu from "../components/ShareMenu";
+import ManagementMenu from "../components/ManagementMenu";
+import ImageCollage from "../components/ImageCollage";
+import TipTapEditor from "../components/editor/TipTapEditor";
 
 const PostDetailPage: React.FC = () => {
   const { postId } = useParams<{ postId: string }>();
@@ -32,52 +32,60 @@ const PostDetailPage: React.FC = () => {
   const [post, setPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<CommentResponse[]>([]);
   const [loading, setLoading] = useState(true);
-  const [commentContent, setCommentContent] = useState('');
+  const [commentContent, setCommentContent] = useState("");
   const [postingComment, setPostingComment] = useState(false);
   const [liked, setLiked] = useState(false);
   const [bookmarked, setBookmarked] = useState(false);
   const [likesCount, setLikesCount] = useState(0);
   const [sharesCount, setSharesCount] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState('');
-  const [editContent, setEditContent] = useState('');
-  const [editHtmlContent, setEditHtmlContent] = useState('');
+  const [editTitle, setEditTitle] = useState("");
+  const [editContent, setEditContent] = useState("");
+  const [editHtmlContent, setEditHtmlContent] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
-  const [editCommentContent, setEditCommentContent] = useState('');
+  const [editCommentContent, setEditCommentContent] = useState("");
 
   useEffect(() => {
     if (postId) {
-      loadPost();
-      loadComments();
+      void loadPostAndComments();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [postId]);
 
-  const loadPost = async () => {
+  // Lightweight comment-only refresh — used after create/edit/delete.
+  const loadComments = async () => {
     try {
-      const response = await postsService.getPost(postId!);
-      const convertedPost = postsService.convertToPost(response);
-      setPost(convertedPost);
-      setEditTitle(convertedPost.title);
-      setEditContent(convertedPost.content);
-      setEditHtmlContent(convertedPost.html_content || '');
-      setLiked(convertedPost.isLiked || false);
-      setBookmarked(convertedPost.isBookmarked || false);
-      setLikesCount(convertedPost.likes);
-      setSharesCount(convertedPost.shares || 0);
+      const response = await commentsService.getComments(postId!, {
+        limit: 50,
+      });
+      setComments(response);
     } catch (error) {
-      console.error('Error loading post:', error);
+      console.error("Error refreshing comments:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const loadComments = async () => {
+  // Fire both requests in parallel — cuts page load latency by ~half on detail page.
+  const loadPostAndComments = async () => {
     try {
-      const response = await commentsService.getComments(postId!, { limit: 50 });
-      setComments(response);
+      const [postResponse, commentsResponse] = await Promise.all([
+        postsService.getPost(postId!),
+        commentsService.getComments(postId!, { limit: 50 }),
+      ]);
+
+      const convertedPost = postsService.convertToPost(postResponse);
+      setPost(convertedPost);
+      setEditTitle(convertedPost.title);
+      setEditContent(convertedPost.content);
+      setEditHtmlContent(convertedPost.html_content || "");
+      setLiked(convertedPost.isLiked || false);
+      setBookmarked(convertedPost.isBookmarked || false);
+      setLikesCount(convertedPost.likes);
+      setSharesCount(convertedPost.shares || 0);
+      setComments(commentsResponse);
     } catch (error) {
-      console.error('Error loading comments:', error);
+      console.error("Error loading post or comments:", error);
     }
   };
 
@@ -95,7 +103,7 @@ const PostDetailPage: React.FC = () => {
     try {
       await postsService.likePost(postId!);
     } catch (error) {
-      console.error('Error liking post:', error);
+      console.error("Error liking post:", error);
       setLiked(!newLiked);
       setLikesCount(likesCount);
     }
@@ -112,32 +120,34 @@ const PostDetailPage: React.FC = () => {
     try {
       await postsService.bookmarkPost(postId!);
     } catch (error) {
-      console.error('Error bookmarking post:', error);
+      console.error("Error bookmarking post:", error);
       setBookmarked(!newBookmarked);
     }
   };
 
   const handleShare = async () => {
     try {
-      setSharesCount(prev => prev + 1);
+      setSharesCount((prev) => prev + 1);
       await postsService.sharePost(post!.id);
     } catch (error) {
-      console.error('Error sharing post:', error);
-      setSharesCount(prev => Math.max(0, prev - 1));
+      console.error("Error sharing post:", error);
+      setSharesCount((prev) => Math.max(0, prev - 1));
     }
   };
 
   const handleDelete = async () => {
     try {
       await postsService.deletePost(postId!);
-      navigate('/');
+      navigate("/");
     } catch (error) {
-      console.error('Error deleting post:', error);
+      console.error("Error deleting post:", error);
     }
   };
 
   const handleUpdate = async () => {
-    const plainText = editHtmlContent ? editHtmlContent.replace(/<[^>]+>/g, '').trim() : editContent.trim();
+    const plainText = editHtmlContent
+      ? editHtmlContent.replace(/<[^>]+>/g, "").trim()
+      : editContent.trim();
     if (!editTitle.trim() || (!plainText && !editHtmlContent)) return;
     setLoading(true);
     try {
@@ -149,7 +159,7 @@ const PostDetailPage: React.FC = () => {
       setPost(postsService.convertToPost(response));
       setIsEditing(false);
     } catch (error) {
-      console.error('Error updating post:', error);
+      console.error("Error updating post:", error);
     } finally {
       setLoading(false);
     }
@@ -161,11 +171,13 @@ const PostDetailPage: React.FC = () => {
 
     setPostingComment(true);
     try {
-      await commentsService.createComment(postId!, { content: commentContent.trim() });
-      setCommentContent('');
+      await commentsService.createComment(postId!, {
+        content: commentContent.trim(),
+      });
+      setCommentContent("");
       await loadComments();
     } catch (error) {
-      console.error('Error posting comment:', error);
+      console.error("Error posting comment:", error);
     } finally {
       setPostingComment(false);
     }
@@ -176,29 +188,31 @@ const PostDetailPage: React.FC = () => {
       await commentsService.deleteComment(commentId);
       await loadComments();
     } catch (error) {
-      console.error('Error deleting comment:', error);
+      console.error("Error deleting comment:", error);
     }
   };
 
   const handleUpdateComment = async (commentId: string) => {
     if (!editCommentContent.trim()) return;
     try {
-      await commentsService.updateComment(commentId, { content: editCommentContent.trim() });
+      await commentsService.updateComment(commentId, {
+        content: editCommentContent.trim(),
+      });
       setEditingCommentId(null);
       await loadComments();
     } catch (error) {
-      console.error('Error updating comment:', error);
+      console.error("Error updating comment:", error);
     }
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
@@ -217,9 +231,11 @@ const PostDetailPage: React.FC = () => {
   if (!post) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-8 text-center">
-        <h2 className="text-2xl font-semibold text-white mb-4">Post not found</h2>
+        <h2 className="text-2xl font-semibold text-white mb-4">
+          Post not found
+        </h2>
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate("/")}
           className="text-blue-400 hover:text-blue-300"
         >
           Go back home
@@ -254,12 +270,20 @@ const PostDetailPage: React.FC = () => {
             <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
-                  <h3 className="truncate font-semibold text-white text-sm sm:text-base">{post.author.name}</h3>
+                  <h3 className="truncate font-semibold text-white text-sm sm:text-base">
+                    {post.author.name}
+                  </h3>
                   {post.author.isVerified && (
-                    <FontAwesomeIcon icon={faCheckCircle} className="h-3.5 w-3.5 shrink-0 text-gray-400 sm:h-4 sm:w-4" />
+                    <FontAwesomeIcon
+                      icon={faCheckCircle}
+                      className="h-3.5 w-3.5 shrink-0 text-gray-400 sm:h-4 sm:w-4"
+                    />
                   )}
                   {post.author.isAdmin && (
-                    <FontAwesomeIcon icon={faShieldAlt} className="h-3.5 w-3.5 shrink-0 text-gray-500 sm:h-4 sm:w-4" />
+                    <FontAwesomeIcon
+                      icon={faShieldAlt}
+                      className="h-3.5 w-3.5 shrink-0 text-gray-500 sm:h-4 sm:w-4"
+                    />
                   )}
                 </div>
               </div>
@@ -285,7 +309,7 @@ const PostDetailPage: React.FC = () => {
                 content={editHtmlContent}
                 onChange={(html) => {
                   setEditHtmlContent(html);
-                  setEditContent(html.replace(/<[^>]+>/g, '').trim());
+                  setEditContent(html.replace(/<[^>]+>/g, "").trim());
                 }}
                 placeholder="What's on your mind?"
               />
@@ -299,7 +323,10 @@ const PostDetailPage: React.FC = () => {
               </button>
               <button
                 onClick={handleUpdate}
-                disabled={!editTitle.trim() || (!editContent.trim() && !editHtmlContent.trim())}
+                disabled={
+                  !editTitle.trim() ||
+                  (!editContent.trim() && !editHtmlContent.trim())
+                }
                 className="px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-500 transition-colors disabled:opacity-50"
               >
                 Save Changes
@@ -308,7 +335,9 @@ const PostDetailPage: React.FC = () => {
           </div>
         ) : (
           <>
-            <h1 className="text-xl sm:text-3xl font-bold text-white mb-3 sm:mb-4 leading-tight">{post.title}</h1>
+            <h1 className="text-xl sm:text-3xl font-bold text-white mb-3 sm:mb-4 leading-tight">
+              {post.title}
+            </h1>
             {post.html_content ? (
               <div
                 className="prose prose-invert max-w-none mb-6 text-gray-300 text-sm sm:text-base"
@@ -349,23 +378,39 @@ const PostDetailPage: React.FC = () => {
             <button
               onClick={handleLike}
               disabled={!isAuthenticated}
-              title={isAuthenticated ? 'Like post' : 'Sign in to like posts'}
+              title={isAuthenticated ? "Like post" : "Sign in to like posts"}
               className={`flex items-center space-x-1.5 sm:space-x-2 transition-colors ${
-                liked ? 'text-white' : isAuthenticated ? 'text-gray-500 hover:text-white' : 'text-gray-600 cursor-not-allowed'
-                }`}
+                liked
+                  ? "text-white"
+                  : isAuthenticated
+                    ? "text-gray-500 hover:text-white"
+                    : "text-gray-600 cursor-not-allowed"
+              }`}
             >
-              <FontAwesomeIcon icon={liked ? faHeartSolid : faHeartRegular} className={`w-4 h-4 sm:w-5 sm:h-5`} />
-              <span className="font-semibold text-xs sm:text-sm">{likesCount}</span>
+              <FontAwesomeIcon
+                icon={liked ? faHeartSolid : faHeartRegular}
+                className={`w-4 h-4 sm:w-5 sm:h-5`}
+              />
+              <span className="font-semibold text-xs sm:text-sm">
+                {likesCount}
+              </span>
             </button>
 
             <button className="flex items-center space-x-1.5 sm:space-x-2 text-gray-500 hover:text-white transition-colors">
-              <FontAwesomeIcon icon={faComment} className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="font-semibold text-xs sm:text-sm">{comments.length}</span>
+              <FontAwesomeIcon
+                icon={faComment}
+                className="w-4 h-4 sm:w-5 sm:h-5"
+              />
+              <span className="font-semibold text-xs sm:text-sm">
+                {comments.length}
+              </span>
             </button>
 
             <div className="flex items-center space-x-1.5 sm:space-x-2 text-gray-500">
               <FontAwesomeIcon icon={faEye} className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="font-semibold text-xs sm:text-sm">{post.views}</span>
+              <span className="font-semibold text-xs sm:text-sm">
+                {post.views}
+              </span>
             </div>
           </div>
 
@@ -373,15 +418,19 @@ const PostDetailPage: React.FC = () => {
             <button
               onClick={handleBookmark}
               disabled={!isAuthenticated}
-              title={isAuthenticated ? 'Save post' : 'Sign in to save posts'}
-              className={`p-1.5 sm:p-2 rounded-xl transition-colors ${bookmarked
-                ? 'text-white bg-gray-800'
-                : isAuthenticated
-                  ? 'text-gray-500 hover:text-white hover:bg-gray-800/50'
-                  : 'text-gray-600 cursor-not-allowed'
-                }`}
+              title={isAuthenticated ? "Save post" : "Sign in to save posts"}
+              className={`p-1.5 sm:p-2 rounded-xl transition-colors ${
+                bookmarked
+                  ? "text-white bg-gray-800"
+                  : isAuthenticated
+                    ? "text-gray-500 hover:text-white hover:bg-gray-800/50"
+                    : "text-gray-600 cursor-not-allowed"
+              }`}
             >
-              <FontAwesomeIcon icon={bookmarked ? faBookmarkSolid : faBookmarkRegular} className={`w-4 h-4 sm:w-5 sm:h-5`} />
+              <FontAwesomeIcon
+                icon={bookmarked ? faBookmarkSolid : faBookmarkRegular}
+                className={`w-4 h-4 sm:w-5 sm:h-5`}
+              />
             </button>
 
             <ShareMenu
@@ -393,7 +442,10 @@ const PostDetailPage: React.FC = () => {
 
             <ManagementMenu
               isOwner={post.author.id === userProfile?.id}
-              isAdmin={userProfile?.role === 'admin' || userProfile?.role === 'super_admin'}
+              isAdmin={
+                userProfile?.role === "admin" ||
+                userProfile?.role === "super_admin"
+              }
               onEdit={() => setIsEditing(true)}
               onDelete={handleDelete}
             />
@@ -404,12 +456,14 @@ const PostDetailPage: React.FC = () => {
       {/* Comments Section */}
       <div className="bg-gray-900/50 backdrop-blur-xl border-y sm:border border-gray-800 sm:rounded-2xl p-4 sm:p-8">
         <h2 className="text-lg sm:text-xl font-semibold text-white mb-6">
-          Comments <span className="text-gray-500 ml-1">({comments.length})</span>
+          Comments{" "}
+          <span className="text-gray-500 ml-1">({comments.length})</span>
         </h2>
 
         {!isAuthenticated && (
           <div className="mb-6 rounded-2xl border border-gray-800/60 bg-gray-800/20 px-4 py-3 text-sm text-gray-400">
-            Visitors can read every comment and share this post. Sign in to post, like, bookmark, or comment.
+            Visitors can read every comment and share this post. Sign in to
+            post, like, bookmark, or comment.
           </div>
         )}
 
@@ -418,7 +472,10 @@ const PostDetailPage: React.FC = () => {
           <form onSubmit={handleCommentSubmit} className="mb-8">
             <div className="flex items-start space-x-3 sm:space-x-4">
               <img
-                src={userProfile?.avatar || 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop'}
+                src={
+                  userProfile?.avatar ||
+                  "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop"
+                }
                 alt="Your avatar"
                 className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex-shrink-0"
               />
@@ -431,14 +488,19 @@ const PostDetailPage: React.FC = () => {
                   className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all resize-none"
                 />
                 <div className="flex items-center justify-between mt-2">
-                  <p className="text-[10px] text-gray-500 uppercase tracking-widest">{commentContent.length} chars</p>
+                  <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                    {commentContent.length} chars
+                  </p>
                   <button
                     type="submit"
                     disabled={!commentContent.trim() || postingComment}
                     className="flex items-center space-x-2 bg-white text-black px-4 py-1.5 rounded-lg text-sm font-bold hover:bg-gray-100 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <FontAwesomeIcon icon={faPaperPlane} className="w-3.5 h-3.5" />
-                    <span>{postingComment ? 'Posting...' : 'Post'}</span>
+                    <FontAwesomeIcon
+                      icon={faPaperPlane}
+                      className="w-3.5 h-3.5"
+                    />
+                    <span>{postingComment ? "Posting..." : "Post"}</span>
                   </button>
                 </div>
               </div>
@@ -450,7 +512,7 @@ const PostDetailPage: React.FC = () => {
               Join the discussion to leave a comment
             </p>
             <button
-              onClick={() => navigate('/login')}
+              onClick={() => navigate("/login")}
               className="bg-gray-800 text-white px-6 py-2 rounded-xl text-sm font-semibold hover:bg-gray-700 transition-all border border-gray-700"
             >
               Sign in
@@ -463,15 +525,26 @@ const PostDetailPage: React.FC = () => {
           {comments.length === 0 ? (
             <div className="text-center py-12">
               <div className="w-12 h-12 bg-gray-800/50 rounded-full flex items-center justify-center mx-auto mb-4">
-                <FontAwesomeIcon icon={faComment} className="w-6 h-6 text-gray-600" />
+                <FontAwesomeIcon
+                  icon={faComment}
+                  className="w-6 h-6 text-gray-600"
+                />
               </div>
-              <p className="text-gray-500 text-sm">No comments yet. Be the first to reply!</p>
+              <p className="text-gray-500 text-sm">
+                No comments yet. Be the first to reply!
+              </p>
             </div>
           ) : (
             comments.map((comment) => (
-              <div key={comment.id} className="flex items-start space-x-3 sm:space-x-4">
+              <div
+                key={comment.id}
+                className="flex items-start space-x-3 sm:space-x-4"
+              >
                 <img
-                  src={comment.author?.avatar || 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop'}
+                  src={
+                    comment.author?.avatar ||
+                    "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?auto=compress&cs=tinysrgb&w=40&h=40&fit=crop"
+                  }
                   alt={comment.author?.name}
                   className="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex-shrink-0 border border-gray-800"
                 />
@@ -489,7 +562,9 @@ const PostDetailPage: React.FC = () => {
                       <div className="space-y-2">
                         <textarea
                           value={editCommentContent}
-                          onChange={(e) => setEditCommentContent(e.target.value)}
+                          onChange={(e) =>
+                            setEditCommentContent(e.target.value)
+                          }
                           className="w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded-xl text-white text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
                           rows={2}
                         />
@@ -521,7 +596,10 @@ const PostDetailPage: React.FC = () => {
                         title="Comment reactions are available for signed-in members"
                         className="flex items-center space-x-1 text-gray-600 cursor-not-allowed text-[10px] font-bold"
                       >
-                        <FontAwesomeIcon icon={faHeartRegular} className="w-3 h-3" />
+                        <FontAwesomeIcon
+                          icon={faHeartRegular}
+                          className="w-3 h-3"
+                        />
                         <span>{comment.likes || 0}</span>
                       </button>
                       <button
@@ -535,7 +613,10 @@ const PostDetailPage: React.FC = () => {
 
                     <ManagementMenu
                       isOwner={comment.author?.id === userProfile?.id}
-                      isAdmin={userProfile?.role === 'admin' || userProfile?.role === 'super_admin'}
+                      isAdmin={
+                        userProfile?.role === "admin" ||
+                        userProfile?.role === "super_admin"
+                      }
                       onEdit={() => {
                         setEditingCommentId(comment.id);
                         setEditCommentContent(comment.content);
