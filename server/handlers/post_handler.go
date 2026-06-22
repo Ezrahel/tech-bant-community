@@ -26,6 +26,12 @@ func NewPostHandler(db *sql.DB) *PostHandler {
 	}
 }
 
+func NewPostHandlerWithService(postService *services.PostService) *PostHandler {
+	return &PostHandler{
+		postService: postService,
+	}
+}
+
 // CreatePost handles POST /api/v1/posts
 func (h *PostHandler) CreatePost(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.GetUserID(r.Context())

@@ -29,12 +29,62 @@ interface RefreshResponse {
   refreshToken?: string;
 }
 
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
+
 class ApiClient {
   private baseURL: string;
   private refreshInFlight: Promise<boolean> | null = null;
 
+  private cache = new Map<string, CacheEntry<unknown>>();
+  private inflightRequests = new Map<string, Promise<unknown>>();
+  private defaultTTL = 30_000; // 30s default cache TTL
+
   constructor(baseURL: string) {
     this.baseURL = baseURL;
+  }
+
+  private getCacheKey(endpoint: string, options?: RequestInit): string {
+    return `${options?.method || 'GET'}:${endpoint}`;
+  }
+
+  private getFromCache<T>(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return null;
+    }
+    return entry.data as T;
+  }
+
+  private setCache<T>(key: string, data: T, ttl?: number): void {
+    this.cache.set(key, {
+      data,
+      expiresAt: Date.now() + (ttl ?? this.defaultTTL),
+    });
+  }
+
+  invalidateCache(method: string, endpoint?: string): void {
+    if (endpoint) {
+      const key = `${method}:${endpoint}`;
+      this.cache.delete(key);
+      this.inflightRequests.delete(key);
+      return;
+    }
+    // If no endpoint specified, clear all GET cache entries
+    for (const key of this.cache.keys()) {
+      if (key.startsWith('GET:')) {
+        this.cache.delete(key);
+      }
+    }
+  }
+
+  clearCache(): void {
+    this.cache.clear();
+    this.inflightRequests.clear();
   }
 
   private getAuthToken(): string | null {
@@ -199,11 +249,34 @@ class ApiClient {
     }
   }
 
-  async get<T>(endpoint: string): Promise<T> {
-    return this.request<T>(endpoint, { method: 'GET' });
+  async get<T>(endpoint: string, options?: { ttl?: number; skipCache?: boolean }): Promise<T> {
+    const cacheKey = this.getCacheKey(endpoint, { method: 'GET' });
+
+    // Return cached data if valid
+    if (!options?.skipCache) {
+      const cached = this.getFromCache<T>(cacheKey);
+      if (cached !== null) return cached;
+    }
+
+    // Deduplicate in-flight requests
+    const inFlight = this.inflightRequests.get(cacheKey);
+    if (inFlight) return inFlight as Promise<T>;
+
+    const promise = this.request<T>(endpoint, { method: 'GET' }).then(data => {
+      this.setCache(cacheKey, data, options?.ttl);
+      this.inflightRequests.delete(cacheKey);
+      return data;
+    }).catch(err => {
+      this.inflightRequests.delete(cacheKey);
+      throw err;
+    });
+
+    this.inflightRequests.set(cacheKey, promise);
+    return promise;
   }
 
   async post<T>(endpoint: string, data?: unknown): Promise<T> {
+    this.invalidateCache('GET', endpoint);
     return this.request<T>(endpoint, {
       method: 'POST',
       body: data ? JSON.stringify(data) : undefined,
@@ -211,6 +284,7 @@ class ApiClient {
   }
 
   async put<T>(endpoint: string, data?: unknown): Promise<T> {
+    this.invalidateCache('GET', endpoint);
     return this.request<T>(endpoint, {
       method: 'PUT',
       body: data ? JSON.stringify(data) : undefined,
@@ -218,6 +292,7 @@ class ApiClient {
   }
 
   async delete<T>(endpoint: string): Promise<T> {
+    this.invalidateCache('GET', endpoint);
     return this.request<T>(endpoint, { method: 'DELETE' });
   }
 
@@ -239,6 +314,7 @@ class ApiClient {
     };
 
     try {
+      this.invalidateCache('GET', endpoint);
       return await sendUpload();
     } catch (error: unknown) {
       if (
@@ -305,6 +381,7 @@ class ApiClient {
     });
 
     try {
+      this.invalidateCache('GET', endpoint);
       return await sendUpload();
     } catch (error: unknown) {
       if (

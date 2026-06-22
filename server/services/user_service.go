@@ -59,41 +59,29 @@ func (s *UserService) GetOrCreateUser(ctx context.Context, userID, email, name s
 	return s.scanUser(row)
 }
 
-// GetUser gets a user by ID with posts count
+// GetUser gets a user by ID (uses counter cache for posts count)
 func (s *UserService) GetUser(ctx context.Context, userID string) (*models.User, error) {
 	query := `
 		SELECT u.id, u.name, u.email, u.avatar, u.bio, u.location, u.website, 
 		       u.is_admin, u.is_verified, u.is_active, u.role, u.provider,
 		       u.posts_count, u.followers_count, u.following_count,
-		       u.created_at, u.updated_at,
-		       COUNT(p.id) as actual_posts_count
+		       u.created_at, u.updated_at
 		FROM public.users u
-		LEFT JOIN public.posts p ON p.author_id = u.id
 		WHERE u.id = $1
-		GROUP BY u.id
 	`
 
 	row := database.QueryRowWithContext(ctx, query, userID)
 	var user models.User
 	var avatar, bio, location, website sql.NullString
-	var actualPostsCount int
 
 	err := row.Scan(
 		&user.ID, &user.Name, &user.Email, &avatar, &bio, &location, &website,
 		&user.IsAdmin, &user.IsVerified, &user.IsActive, &user.Role, &user.Provider,
 		&user.PostsCount, &user.FollowersCount, &user.FollowingCount,
 		&user.CreatedAt, &user.UpdatedAt,
-		&actualPostsCount,
 	)
 	if err != nil {
 		return nil, err
-	}
-
-	// Update posts count if different
-	if actualPostsCount != user.PostsCount {
-		user.PostsCount = actualPostsCount
-		// Optionally update the count in database
-		_, _ = database.ExecWithContext(ctx, "UPDATE public.users SET posts_count = $1 WHERE id = $2", actualPostsCount, userID)
 	}
 
 	if avatar.Valid {

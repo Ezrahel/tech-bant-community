@@ -43,6 +43,16 @@ func main() {
 		log.Println("Redis rate limiting initialized")
 	}
 
+	// Initialize Cache Service
+	cacheService, err := services.NewCacheService(cfg)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize Redis cache: %v. Cache disabled.", err)
+		cacheService = nil
+	} else {
+		defer cacheService.Close()
+		log.Println("Redis cache initialized")
+	}
+
 	// Initialize services
 	emailService := services.NewEmailService(cfg)
 	twoFAService := services.NewTwoFAService(cfg)
@@ -53,7 +63,7 @@ func main() {
 	authHandler := handlers.NewAuthHandlerWithService(cfg, authService, emailService, twoFAService)
 	twoFAHandler := handlers.NewTwoFAHandler(twoFAService, emailService, rateLimitService, supabase.GetDB())
 	oauthHandler := handlers.NewOAuthHandler(oauthService)
-	postHandler := handlers.NewPostHandler(supabase.GetDB())
+	postHandler := handlers.NewPostHandlerWithService(services.NewPostServiceWithCache(supabase.GetDB(), cacheService))
 	userHandler := handlers.NewUserHandler(supabase.GetDB())
 	commentHandler := handlers.NewCommentHandler(supabase.GetDB())
 	mediaHandler := handlers.NewMediaHandler(supabase.GetDB(), cfg)

@@ -170,6 +170,29 @@ func (s *CacheService) InvalidateStats(ctx context.Context) error {
 	return s.client.Del(ctx, "admin:stats").Err()
 }
 
+// InvalidatePosts invalidates all post list caches
+func (s *CacheService) InvalidatePosts(ctx context.Context) error {
+	if s.client == nil {
+		return nil
+	}
+
+	var cursor uint64
+	for {
+		keys, nextCursor, err := s.client.Scan(ctx, cursor, "posts:*", 100).Result()
+		if err != nil {
+			return err
+		}
+		if len(keys) > 0 {
+			_ = s.client.Del(ctx, keys...).Err()
+		}
+		cursor = nextCursor
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil
+}
+
 // Close closes the cache connection
 func (s *CacheService) Close() error {
 	if s.client != nil {

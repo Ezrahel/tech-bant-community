@@ -18,12 +18,18 @@ import (
 
 // PostService handles post operations
 type PostService struct {
-	db *sql.DB
+	db    *sql.DB
+	cache *CacheService
 }
 
 // NewPostService creates a new PostService instance
 func NewPostService(db *sql.DB) *PostService {
-	return &PostService{db: db}
+	return &PostService{db: db, cache: nil}
+}
+
+// NewPostServiceWithCache creates a PostService instance with Redis caching
+func NewPostServiceWithCache(db *sql.DB, cache *CacheService) *PostService {
+	return &PostService{db: db, cache: cache}
 }
 
 // CreatePost creates a new post in PostgreSQL
@@ -127,6 +133,11 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	// Invalidate post list cache
+	if s.cache != nil {
+		s.cache.InvalidatePosts(ctx)
+	}
+
 	// Populate author
 	post.Author = user
 
@@ -169,13 +180,15 @@ func (s *PostService) GetPost(ctx context.Context, postID string) (*models.Post,
 
 	post.Author = &author
 
-	// Increment views
-	_, _ = database.ExecWithContext(ctx, "UPDATE public.posts SET views = views + 1 WHERE id = $1", postID)
+	// Increment views asynchronously to avoid blocking the response
+	go func() {
+		_, _ = database.ExecWithContext(context.Background(), "UPDATE public.posts SET views = views + 1 WHERE id = $1", postID)
+	}()
 
 	return &post, nil
 }
 
-// GetPosts gets posts with pagination
+// GetPosts gets posts with pagination (cached)
 func (s *PostService) GetPosts(ctx context.Context, limit, offset int) ([]*models.Post, error) {
 	if limit <= 0 {
 		limit = 20
@@ -185,6 +198,15 @@ func (s *PostService) GetPosts(ctx context.Context, limit, offset int) ([]*model
 	}
 	if offset < 0 {
 		offset = 0
+	}
+
+	// Try cache first (first page only, no offset)
+	if s.cache != nil && offset == 0 {
+		cacheKey := fmt.Sprintf("posts:list:%d", limit)
+		cached, err := s.cache.GetPosts(ctx, cacheKey)
+		if err == nil && cached != nil {
+			return cached, nil
+		}
 	}
 
 	query := `
@@ -231,10 +253,16 @@ func (s *PostService) GetPosts(ctx context.Context, limit, offset int) ([]*model
 		posts = append(posts, &post)
 	}
 
+	// Cache first page for 30s
+	if s.cache != nil && offset == 0 && len(posts) > 0 {
+		cacheKey := fmt.Sprintf("posts:list:%d", limit)
+		_ = s.cache.SetPosts(ctx, cacheKey, posts, 30*time.Second)
+	}
+
 	return posts, nil
 }
 
-// GetPostsByCategory gets posts by category
+// GetPostsByCategory gets posts by category (cached)
 func (s *PostService) GetPostsByCategory(ctx context.Context, category string, limit, offset int) ([]*models.Post, error) {
 	if limit <= 0 {
 		limit = 20
@@ -244,6 +272,15 @@ func (s *PostService) GetPostsByCategory(ctx context.Context, category string, l
 	}
 	if offset < 0 {
 		offset = 0
+	}
+
+	// Try cache first (first page only, no offset)
+	if s.cache != nil && offset == 0 {
+		cacheKey := fmt.Sprintf("posts:category:%s:%d", category, limit)
+		cached, err := s.cache.GetPosts(ctx, cacheKey)
+		if err == nil && cached != nil {
+			return cached, nil
+		}
 	}
 
 	query := `
@@ -291,17 +328,23 @@ func (s *PostService) GetPostsByCategory(ctx context.Context, category string, l
 		posts = append(posts, &post)
 	}
 
+	// Cache first page for 30s
+	if s.cache != nil && offset == 0 && len(posts) > 0 {
+		cacheKey := fmt.Sprintf("posts:category:%s:%d", category, limit)
+		_ = s.cache.SetPosts(ctx, cacheKey, posts, 30*time.Second)
+	}
+
 	return posts, nil
 }
 
 // UpdatePost updates a post
 func (s *PostService) UpdatePost(ctx context.Context, userID, postID string, req *models.UpdatePostRequest) (*models.Post, error) {
-	// Verify ownership
-	post, err := s.GetPost(ctx, postID)
+	// Verify ownership (lightweight check, no full post fetch)
+	ownerID, err := s.getPostOwnerID(ctx, postID)
 	if err != nil {
 		return nil, err
 	}
-	if post.AuthorID != userID {
+	if ownerID != userID {
 		return nil, fmt.Errorf("unauthorized")
 	}
 
@@ -346,17 +389,22 @@ func (s *PostService) UpdatePost(ctx context.Context, userID, postID string, req
 		return nil, err
 	}
 
+	// Invalidate post list cache
+	if s.cache != nil {
+		s.cache.InvalidatePosts(ctx)
+	}
+
 	return s.GetPost(ctx, postID)
 }
 
 // DeletePost deletes a post
 func (s *PostService) DeletePost(ctx context.Context, userID, postID string) error {
-	// Verify ownership
-	post, err := s.GetPost(ctx, postID)
+	// Verify ownership (lightweight check, no full post fetch)
+	ownerID, err := s.getPostOwnerID(ctx, postID)
 	if err != nil {
 		return err
 	}
-	if post.AuthorID != userID {
+	if ownerID != userID {
 		return fmt.Errorf("unauthorized")
 	}
 
@@ -385,7 +433,16 @@ func (s *PostService) DeletePost(ctx context.Context, userID, postID string) err
 		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Invalidate post list cache
+	if s.cache != nil {
+		s.cache.InvalidatePosts(ctx)
+	}
+
+	return nil
 }
 
 // LikePost toggles like on a post
@@ -422,7 +479,16 @@ func (s *PostService) LikePost(ctx context.Context, userID, postID string) error
 		return err
 	}
 
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// Invalidate post list cache
+	if s.cache != nil {
+		s.cache.InvalidatePosts(ctx)
+	}
+
+	return nil
 }
 
 // BookmarkPost toggles bookmark on a post
@@ -441,7 +507,26 @@ func (s *PostService) BookmarkPost(ctx context.Context, userID, postID string) e
 		_, err = database.ExecWithContext(ctx, "INSERT INTO public.bookmarks (id, post_id, user_id, created_at) VALUES ($1, $2, $3, $4)", bookmarkID, postID, userID, time.Now().UTC())
 	}
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	// Invalidate post list cache
+	if s.cache != nil {
+		s.cache.InvalidatePosts(ctx)
+	}
+
+	return nil
+}
+
+// getPostOwnerID returns the author_id for a post (lightweight, no full fetch)
+func (s *PostService) getPostOwnerID(ctx context.Context, postID string) (string, error) {
+	var ownerID string
+	err := database.QueryRowWithContext(ctx, "SELECT author_id FROM public.posts WHERE id = $1", postID).Scan(&ownerID)
+	if err != nil {
+		return "", err
+	}
+	return ownerID, nil
 }
 
 // hashPostContent generates a hash for duplicate detection
