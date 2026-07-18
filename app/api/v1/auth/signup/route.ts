@@ -194,9 +194,9 @@ export async function POST(req: NextRequest) {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    from: process.env.RESEND_FROM || 'TechBant <noreply@techbantcommunity.com>',
+                    from: process.env.RESEND_FROM || 'TechBant <noreply@gigagossip.xyz>',
                     to: email,
-                    subject: 'Welcome to TechBant Community!',
+                    subject: 'Welcome to GigaGossip Community!',
                     html: WELCOME_HTML.replace('{{name}}', name).replace('{{siteUrl}}', siteUrl),
                 }),
             });
