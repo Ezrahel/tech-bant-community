@@ -186,7 +186,7 @@ export async function POST(req: NextRequest) {
 
         // Send welcome email via Resend
         try {
-            const siteUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || process.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'https://nothing-community.vercel.app';
+            const siteUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || process.env.VITE_API_BASE_URL?.replace('/api/v1', '') || 'https://www.gigagossip.xyz';
             await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: {
